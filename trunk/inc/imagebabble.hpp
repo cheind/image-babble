@@ -1,91 +1,29 @@
 /*! \file imagebabble.hpp
-    \brief A small and efficient library to send and receive images over networks.
 
-    \section Introduction Introduction
+    Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
+    All rights reserved.
 
-    \section ExecutionModels Execution Models
-    ImageBabble supports two execution models that map to two distinct use-cases.
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+        * Redistributions of source code must retain the above copyright
+          notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+        * Neither the name of PROFACTOR GmbH nor the
+          names of its contributors may be used to endorse or promote products
+          derived from this software without specific prior written permission.
 
-    \subsection FastModel Fast Execution Model
-    By default a fast publisher/subscriber pattern is used which avoids back-chatter. 
-    The characteristics are:
-     - the server fans out frames to all connected clients,
-     - the server does not block when no clients are connected,
-     - the server does not care about processing speeds of clients,
-
-    In the fast mode you should expect to lose frames at the client side. This frames can
-    be lost at any time during the course of sending data. Expect it, it will happen.
-        
-    The fast protocol is thus best used when you want to transmit a lot images and when you 
-    don't care about lost messages. This could be the case for streaming real-time image data 
-    from a web-cam.
-    
-    \subsection ReliableModel Reliable Execution Model
-    The second model supported is more reliable. It uses back-chatter to solve many of the 
-    deficiencies of the fast model, thereby accepting a loss of performance in terms of 
-    throughput. The characteristics are:
-     - the server sends frames to one connected client,
-     - the server waits for one client to connect/reconnect,
-     - the server waits for one client to be ready to receive next frame.
-    
-    In the reliable mode you will not lose frames at the client side, except more than 
-    one client is connected. Since each connection should only deal with one client, the server
-    supports creating multiple connections to deal with more than one client. In case multiple
-    connection are used, publishing frames will block until all connections have received the data.
-    
-    \section NetworkProtocols Network Protocol
-    The ImageBabble library is based on ZMQ. ZMQ is not a neutral carrier, but
-    implements its functionality based on protocol named ZMTP that sits on top
-    of network protocols such as TCP.
-
-    Each frame published by the server consists of 0..n image headers and 
-    0..n image data blocks. ImageBabble utilizes multi-part messages to represent
-    a frame. The structure of a frame is as follows (each new field represents a
-    unique message part).
-    
-    \verbatim
-      frame_id [, num_headers, header*, num_buffers, buffer*, empty]
-    \endverbatim
-
-    A few notes:
-    
-    All parts except for the actual data buffers are sent as strings. The buffer is sent as given 
-    by the caller. Since the buffer is sent uninterpreted, no network byte-order conversion is 
-    performed at the library level. It remains in the responsibility of the caller to ensure 
-    correct conversion at the server/client interface. Since many systems now-a-days are 
-    little-endian this approach seems reasonable and avoids unnecessary operations.
-
-    From the specification it is legal to transmit no image headers at all. This is meant as
-    an advanced possibility to transmit less data on the network. It is useful only when the
-    format of the image data to be sent is known in advance at the client side and does not
-    change during the course of transmission.
-
-    In case the frame_id is negative, no more message parts are send. Negative frame numbers
-    indicate a client shutdown request or error at the server.
-
-    \section Copyright Copyright Notice
-
-    \verbatim
-    Copyright (c) 2013 Christoph Heindl
-    
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to
-    deal in the Software without restriction, including without limitation the
-    rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-    sell copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in
-    all copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-    IN THE SOFTWARE.
-    \endverbatim
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+    ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+    DISCLAIMED. IN NO EVENT SHALL PROFACTOR GmbH BE LIABLE FOR ANY
+    DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+    ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
 #ifndef __IMAGE_BABBLE_HPP_INCLUDED__
@@ -142,6 +80,7 @@ namespace imagebabble {
       }
       return *this;
     }
+
 #endif
 
     /** Set image resolution in x dimension */
@@ -396,7 +335,7 @@ namespace imagebabble {
     bool _skip_user_data;
   };
 
-    /** Reference counted pointer to a ZMQ socket. */
+  /** Reference counted pointer to a ZMQ socket. */
   typedef std::shared_ptr<zmq::socket_t> socket_ptr;
   /** Reference counted pointer to a ZMQ context. */
   typedef std::shared_ptr<zmq::context_t> context_ptr;
