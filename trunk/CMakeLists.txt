@@ -19,7 +19,6 @@ find_package(Boost COMPONENTS thread system unit_test_framework)
 
 
 include_directories(${CMAKE_SOURCE_DIR}/inc)
-include_directories(${CMAKE_SOURCE_DIR}/external)
 include_directories(${ZeroMQ_INCLUDE_DIR})
 
 # Examples
