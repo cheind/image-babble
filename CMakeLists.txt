@@ -15,7 +15,7 @@ find_package(OpenCV)
 
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS OFF)
-find_package(Boost COMPONENTS thread system unit_test_framework)
+find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono)
 
 
 include_directories(${CMAKE_SOURCE_DIR}/inc)
@@ -33,7 +33,22 @@ if(OpenCV_FOUND)
   target_link_libraries(example_webcamclient ${EXAMPLE_LIBS})
 endif()
 
-add_definitions(-DBOOST_ALL_DYN_LINK)
+# Tests
+if(Boost_FOUND)
+  set(TEST_LIBS ${ZeroMQ_LIBRARY} ${Boost_LIBRARIES})
+  include_directories(${Boost_INCLUDE_DIR})
+  add_definitions(-DBOOST_ALL_DYN_LINK)
+  
+  add_executable(
+    test_imagebabble 
+    tests/main.cpp
+    tests/test_reliable.cpp)
+
+  target_link_libraries(test_imagebabble ${TEST_LIBS})
+
+endif()
+
+
 
 
 
