@@ -91,9 +91,6 @@
 #ifndef __IMAGE_BABBLE_HPP_INCLUDED__
 #define __IMAGE_BABBLE_HPP_INCLUDED__
 
-#define IMAGEBABBLE_IMAGE_PROTO_VERSION "1"
-#define IMAGEBABBLE_DISCOVERY_PROTO_VERSION "1"
-
 #include <zmq.hpp>
 #include <memory>
 #include <streambuf>
@@ -103,6 +100,10 @@
 #include <vector>
 #include <hash_set>
 #include <ctime>
+
+#define IMAGEBABBLE_IMAGE_PROTO_VERSION "1"
+#define IMAGEBABBLE_DISCOVERY_PROTO_VERSION "1"
+#define IMAGEBABBLE_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
 
 namespace imagebabble {
 
@@ -118,6 +119,30 @@ namespace imagebabble {
     inline image_header(int w, int h, int c, int bc, const std::string &n)
       : _name(n), _width(w), _height(h), _channels(c), _bytes_per_channel(bc)
     {}
+
+#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+
+    /** Move constructor */
+    inline image_header (image_header &&rhs)
+      : _name(std::move(rhs._name)), 
+        _width(rhs._width), _height(rhs._height), 
+        _channels(rhs._channels), 
+        _bytes_per_channel(rhs._bytes_per_channel)
+    {}
+
+    /** Move assignment operator */
+    inline image_header &operator = (image_header &&rhs)
+    {
+      if (this != &rhs) {
+        _name = std::move(rhs._name);
+        _width = rhs._width;
+        _height = rhs._height;
+        _channels = rhs._channels;
+        _bytes_per_channel = rhs._bytes_per_channel;
+      }
+      return *this;
+    }
+#endif
 
     /** Set image resolution in x dimension */
     inline void set_width(int n) { _width = n; }
@@ -182,6 +207,9 @@ namespace imagebabble {
     return is;    
   }
 
+  struct share_mem {};
+  struct copy_mem {};
+
   /** Image data buffer. */
   class image_data {
   public:
@@ -202,9 +230,35 @@ namespace imagebabble {
     /** Construct a data buffer from existing memory. The implementation
       * does not take ownership of the passed memory bock. Freeing it is
       * a responsibility of the caller. */
-    inline explicit image_data(void *data, int length) 
+    inline explicit image_data(void *data, size_t length, const share_mem &) 
       :_msg(data, length, null_deleter, 0), _pre_allocated(true)
     {}
+
+    /** Construct a data buffer from existing memory.*/
+    inline explicit image_data(void *data, size_t length, const copy_mem &) 
+      : _msg(length), _pre_allocated(false)
+    {
+      memcpy(_msg.data(), data, length);      
+    }
+
+#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+
+    /** Move constructor */
+    inline image_data (image_data &&rhs)
+      : _msg(std::move(rhs._msg)),
+        _pre_allocated(rhs._pre_allocated)        
+    {}
+
+    /** Move assignment operator */
+    inline image_data &operator = (image_data &&rhs)
+    {
+      if (this != &rhs) {
+        _msg = std::move(rhs._msg);
+        _pre_allocated = rhs._pre_allocated;
+      }
+      return *this;
+    }
+#endif
 
     /** Assign from other buffer. The implementation does not copy the data 
       * but instead increase its reference count. */
@@ -233,6 +287,12 @@ namespace imagebabble {
     size_t size() const 
     {
       return _msg.size();
+    }
+
+    inline size_t copy_data(void *dst, size_t length) const {
+      size_t n = std::min<size_t>(length, _msg.size());
+      memcpy(dst, _msg.data(), n);
+      return n;
     }
 
     /** Get the underlying ZMQ message. */
@@ -292,6 +352,14 @@ namespace imagebabble {
     inline std::string &get_user_data() { return _user_data; }
     /** Get user data */
     inline const std::string &get_user_data() const { return _user_data; }
+
+    inline void append_image_header(const image_header &h) { _headers.push_back(h); }
+    inline void append_image_data(const image_data &d) { _data.push_back(d); }
+
+#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+    inline void append_image_header(image_header &&h) { _headers.push_back(h); }
+    inline void append_image_data(image_data &&d) { _data.push_back(d); }
+#endif
 
   private:
     std::vector<image_header> _headers;
@@ -865,14 +933,13 @@ namespace imagebabble {
     /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
     inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
     {
-      shutdown();
+      if (!_s) {
+        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
 
-      _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
-
-      int linger = 0; 
-      _s->setsockopt(ZMQ_LINGER, &linger, sizeof(int));
-
-      _s->setsockopt(ZMQ_SUBSCRIBE, 0, 0);      
+        int linger = 0; 
+        _s->setsockopt(ZMQ_LINGER, &linger, sizeof(int));
+        _s->setsockopt(ZMQ_SUBSCRIBE, 0, 0);      
+      }
       _s->connect(addr.c_str());
     }
 
@@ -913,12 +980,12 @@ namespace imagebabble {
     /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
     inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
     {
-      shutdown();
-
-      _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
+      if (!_s) {
+        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
       
-      int linger = 0; 
-      _s->setsockopt(ZMQ_LINGER, &linger, sizeof(int));
+        int linger = 0; 
+        _s->setsockopt(ZMQ_LINGER, &linger, sizeof(int));
+      }
 
       _s->connect(addr.c_str());
     }
@@ -1036,8 +1103,6 @@ namespace imagebabble {
           found.push_back(*iter);
         }
       }
-
-      std::cout << di << std::endl;
 
       return found;
     }
