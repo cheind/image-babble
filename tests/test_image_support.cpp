@@ -28,8 +28,7 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <imagebabble/core.hpp>
-#include <imagebabble/image_support.hpp>
+#include <imagebabble/imagebabble.hpp>
 #include "test_utilities.hpp"
 
 BOOST_AUTO_TEST_SUITE(test_image_support)

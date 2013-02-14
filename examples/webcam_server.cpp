@@ -26,9 +26,8 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-#include <imagebabble\core.hpp>
-#include <imagebabble\image_support.hpp>
-#include <opencv2\opencv.hpp>
+#include <imagebabble/imagebabble.hpp>
+#include <opencv2/opencv.hpp>
 #include <iostream>
 
 int main(int argc, char *argv[]) 
@@ -43,8 +42,7 @@ int main(int argc, char *argv[])
   // Open video device
 
   cv::VideoCapture vc;
-  vc.set(CV_CAP_PROP_FPS, 10.0);
-  vc.open("Wildlife.wmv");
+  vc.open(0);
 
   if (!vc.isOpened()) {
     std::cerr << "Failed to open video device" << std::endl;

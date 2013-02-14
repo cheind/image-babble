@@ -28,7 +28,7 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <imagebabble/core.hpp>
+#include <imagebabble/imagebabble.hpp>
 #include <boost/thread.hpp>
 
 BOOST_AUTO_TEST_SUITE(test_core)
