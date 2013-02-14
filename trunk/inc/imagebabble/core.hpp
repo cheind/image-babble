@@ -494,7 +494,7 @@ namespace imagebabble {
     template<class T>
     inline bool receive(T &t, int timeout_ms = 0)
     {
-      if (!io::is_data_pending(*_s, timeout)) {
+      if (!io::is_data_pending(*_s, timeout_ms)) {
         return false;
       }
 
@@ -548,13 +548,13 @@ namespace imagebabble {
       * \returns false when timeout occurred or receiving data failed.
       */
     template<class T>
-    bool receive(T &t, int timeout = -1) 
+    bool receive(T &t, int timeout_ms = -1) 
     {
       // Send ready
       io::send(*_s, io::empty());
 
       // Wait for reply
-      if (!io::is_data_pending(*_s, timeout)) {
+      if (!io::is_data_pending(*_s, timeout_ms)) {
         return false;
       }
 
