@@ -162,5 +162,98 @@ BOOST_AUTO_TEST_CASE(no_clients)
   BOOST_REQUIRE(sum_sent == 0);
 }
 
+BOOST_AUTO_TEST_CASE(disconnected_client)
+{
+  size_t nclients = 1;
+
+  int sum_sent = 0;
+  int sum_received = 0;
+
+  boost::thread_group g;
+
+  // Server part
+  g.create_thread([&sum_sent]() {
+
+    ib::reliable_server s;
+    s.startup();
+
+    if (s.publish(1)) sum_sent += 1;
+    if (s.publish(2)) sum_sent += 2;
+
+    s.shutdown();
+
+  });
+
+  g.create_thread([&sum_received]() {
+
+    int j = -1;
+
+    ib::reliable_client c;    
+
+    c.startup();
+    c.receive(j); sum_received += j;
+    c.shutdown();
+
+    c.startup();
+    c.receive(j); sum_received += j;
+    c.shutdown();
+
+  });
+
+  g.join_all();
+
+  BOOST_REQUIRE(sum_sent > 0 && sum_sent == sum_received);  
+}
+
+BOOST_AUTO_TEST_CASE(missing_client)
+{
+  size_t nclients = 2;
+
+  int sum_sent = 0;
+  int sum_received[2] = {0, 0};
+
+  boost::thread_group g;
+
+  // Server part
+  g.create_thread([&sum_sent, nclients]() {
+
+    ib::reliable_server s;
+    s.startup();
+
+    if (s.publish(1, -1, nclients)) sum_sent += 1;
+    if (s.publish(2, 2000, nclients)) sum_sent += 2;
+
+    s.shutdown();
+
+  });
+
+  g.create_thread([&sum_received]() {
+
+    int j = -1;
+
+    ib::reliable_client c;    
+
+    c.startup();
+    if (c.receive(j, -1)) sum_received[0] += j;
+    if (c.receive(j, 2000)) sum_received[0] += j;
+    c.shutdown();    
+  });
+
+  g.create_thread([&sum_received]() {
+
+    int j = -1;
+
+    ib::reliable_client c;    
+
+    c.startup();
+    // Just receive once and disconnect
+    if (c.receive(j, -1)) sum_received[1] += j;
+    c.shutdown();    
+  });
+
+  g.join_all();
+
+  BOOST_REQUIRE(sum_sent == 1 && sum_received[0] == 1 && sum_received[1] == 1);  
+}
 
 BOOST_AUTO_TEST_SUITE_END()

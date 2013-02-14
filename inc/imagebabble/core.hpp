@@ -294,6 +294,7 @@ namespace imagebabble {
     {
       if (_s && _s->connected()) {
         _s->close();
+        _s.reset();
       }      
     }
 
@@ -341,6 +342,7 @@ namespace imagebabble {
     {
       if (_s && _s->connected()) {
         _s->close();
+        _s.reset();
       }      
     }
 
@@ -422,6 +424,7 @@ namespace imagebabble {
     {
       if (_s && _s->connected()) {
         _s->close();
+        _s.reset();
       }
     }
 
@@ -465,6 +468,7 @@ namespace imagebabble {
     {
       if (_s && _s->connected()) {
         _s->close();
+        _s.reset();
       }
     }
 

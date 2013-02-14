@@ -78,43 +78,62 @@ BOOST_AUTO_TEST_CASE(image)
 
 #ifdef IMAGEBABBLE_HAS_RVALUE_REFS
    {
-    int x = 10;
-    ib::image i0(1,1,4,&x, ib::image::share_mem());
-    ib::image i1(std::move(i0));
 
-    BOOST_REQUIRE_EQUAL(1, i1.get_width());
-    BOOST_REQUIRE_EQUAL(1, i1.get_height());
-    BOOST_REQUIRE_EQUAL(4, i1.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i1.size());    
-    BOOST_REQUIRE_EQUAL(&x, i1.ptr<int>());    
+      int x = 10;
+      ib::image i0(1,1,4,&x, ib::image::share_mem());
+      ib::image i1(std::move(i0));
 
-    ib::image i2 = std::move(i1);
+      BOOST_REQUIRE_EQUAL(1, i1.get_width());
+      BOOST_REQUIRE_EQUAL(1, i1.get_height());
+      BOOST_REQUIRE_EQUAL(4, i1.get_bytes_per_pixel());
+      BOOST_REQUIRE_EQUAL(4, i1.size());    
+      BOOST_REQUIRE_EQUAL(&x, i1.ptr<int>());    
 
-    BOOST_REQUIRE_EQUAL(1, i2.get_width());
-    BOOST_REQUIRE_EQUAL(1, i2.get_height());
-    BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i2.size());    
-    BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());   
+      ib::image i2 = std::move(i1);
 
-    i2 = std::move(i2);
+      BOOST_REQUIRE_EQUAL(1, i2.get_width());
+      BOOST_REQUIRE_EQUAL(1, i2.get_height());
+      BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
+      BOOST_REQUIRE_EQUAL(4, i2.size());    
+      BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());   
+
+      i2 = std::move(i2);
     
-    BOOST_REQUIRE_EQUAL(1, i2.get_width());
-    BOOST_REQUIRE_EQUAL(1, i2.get_height());
-    BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i2.size());    
-    BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());
+      BOOST_REQUIRE_EQUAL(1, i2.get_width());
+      BOOST_REQUIRE_EQUAL(1, i2.get_height());
+      BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
+      BOOST_REQUIRE_EQUAL(4, i2.size());    
+      BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());
 
-    i0 = ib::image(1,1,4,&x, ib::image::copy_mem());
-    int *adr = i0.ptr<int>();
-    i1 = std::move(i0);
+      /* I believe zeromq does this is by design. It copies the data if the message size is 
+         small and reference counts it if its above a certain size. It looks like the size 
+         threshold is specified by the max_vsm_size enum in msg.hpp, currently set to 29, so if 
+         you make your message size 30 it should switch to reference counting. */
 
-    BOOST_REQUIRE_EQUAL(1, i1.get_width());
-    BOOST_REQUIRE_EQUAL(1, i1.get_height());
-    BOOST_REQUIRE_EQUAL(4, i1.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i1.size());    
-    // BOOST_REQUIRE_EQUAL(adr, i1.ptr<int>());
+      const int zmq_min_size_ref_count = 30;
+      const int elems = (zmq_min_size_ref_count / sizeof(int)) + 1;
 
-  }
+      // should ref-count
+
+      i0 = ib::image(1, elems, sizeof(int));
+      int *adr = i0.ptr<int>();
+      i1 = std::move(i0);
+
+      BOOST_REQUIRE_EQUAL(1, i1.get_width());
+      BOOST_REQUIRE_EQUAL(elems, i1.get_height());
+      BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_bytes_per_pixel());
+      BOOST_REQUIRE_EQUAL(elems * sizeof(int), i1.size());    
+      BOOST_REQUIRE_EQUAL(adr, i1.ptr<int>());
+
+      // should not ref count
+
+      i0 = ib::image(1, elems - 1, sizeof(int));
+      adr = i0.ptr<int>();
+      i1 = std::move(i0);
+  
+      BOOST_REQUIRE_NE(adr, i1.ptr<int>());
+
+    }
 #endif
 }
 
