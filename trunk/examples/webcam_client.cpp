@@ -26,9 +26,8 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-#include <imagebabble\core.hpp>
-#include <imagebabble\image_support.hpp>
-#include <opencv2\opencv.hpp>
+#include <imagebabble/imagebabble.hpp>
+#include <opencv2/opencv.hpp>
 #include <iostream>
 
 int main(int argc, char *argv[]) 
