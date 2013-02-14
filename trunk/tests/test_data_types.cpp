@@ -85,5 +85,4 @@ BOOST_AUTO_TEST_CASE(data_types)
 
   g.join_all();
 }
-
 BOOST_AUTO_TEST_SUITE_END()

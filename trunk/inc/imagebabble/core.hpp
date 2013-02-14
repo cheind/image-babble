@@ -30,6 +30,7 @@
 #define __IMAGE_BABBLE_CORE_HPP_INCLUDED__
 
 #include "zmq.hpp"
+#include <zmq_utils.h>
 #include <memory>
 #include <streambuf>
 #include <sstream>
@@ -98,22 +99,29 @@ namespace imagebabble {
 
   };
 
-  /** A CPU timer. */
-  class timer {
+  /** Simple stopwatch implementation. */
+  class stopwatch {
   public:
-    /** Construct with current time */
-    inline timer()
-      :_begin(std::clock())
+    /** Construct with start point */
+    inline stopwatch()
+      : _handle(zmq_stopwatch_start()), _elapsed(0)
     {}
 
+    inline ~stopwatch()
+    {
+      zmq_stopwatch_stop(_handle);
+    }
+
     /** Get elapsed time since construction in milli-seconds */
-    inline int elapsed_msecs() const {
-      std::clock_t now = std::clock();
-      return static_cast<int>(double(now - _begin) / CLOCKS_PER_SEC) * 1000;
+    inline unsigned long elapsed_msecs() {
+      _elapsed += zmq_stopwatch_stop(_handle);      
+      _handle = zmq_stopwatch_start();      
+      return _elapsed / 1000;
     }
 
   private:
-    std::clock_t _begin;
+    void *_handle;    
+    unsigned long _elapsed;
   };
 
   /** Convenience send and receive functions for use with ZMQ */
@@ -347,7 +355,7 @@ namespace imagebabble {
       typedef std::hash_set<std::string> client_set;
 
       client_set clients;
-      timer stopwatch;
+      stopwatch sw;
 
       bool continue_wait = true;
       int wait_time = timeout;
@@ -363,7 +371,7 @@ namespace imagebabble {
           clients.insert(address);
           can_read = io::is_data_pending(*_s, 0);
         }
-        continue_wait = (timeout == -1 || (stopwatch.elapsed_msecs() < timeout));
+        continue_wait = (timeout == -1 || ((int)sw.elapsed_msecs() < timeout));
       } while ((clients.size() < min_serve) && continue_wait);
 
       if (clients.size() >= min_serve) {
