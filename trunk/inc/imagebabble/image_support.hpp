@@ -294,21 +294,19 @@ namespace imagebabble {
       * truncated to fit and false is returned. */
     inline bool recv(zmq::socket_t &s, image &v) 
     {
-
-      bool all_ok = true;
-
-      all_ok &= io::recv(s, v._w);
-      all_ok &= io::recv(s, v._h);
-      all_ok &= io::recv(s, v._bbp);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._w), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._h), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._bbp), s);
 
       if (v._shared_mem) {
         int bytes = zmq_recv(s, v._msg.data(), v._msg.size(), 0);
-        all_ok &= (bytes <= static_cast<int>(v._msg.size()));      
+        int maxbytes = static_cast<int>(v._msg.size());
+        IB_STOP_RECV_UNLESS(bytes <= maxbytes, s);
       } else {
-        all_ok &= s.recv(&v._msg);
+        IB_STOP_RECV_UNLESS(s.recv(&v._msg), s);
       }
 
-      return all_ok;
+      return true;
     }
 
     /** Send image group. */
@@ -327,13 +325,11 @@ namespace imagebabble {
     inline bool recv(zmq::socket_t &s, image_group &v) 
     {
 
-      bool all_ok = true;
+      IB_STOP_RECV_UNLESS(io::recv(s, v._id), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._names), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._images), s);
 
-      all_ok &= io::recv(s, v._id);
-      all_ok &= io::recv(s, v._names);
-      all_ok &= io::recv(s, v._images);
-
-      return all_ok;
+      return true;
     }
 
 

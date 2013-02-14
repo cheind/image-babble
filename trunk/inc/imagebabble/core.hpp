@@ -39,8 +39,14 @@
 #include <vector>
 #include <hash_set>
 
-#define IMAGEBABBLE_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
-#define IMAGEBABBLE_EXCHANGE_PROTO_VERSION "1"
+#define IB_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
+#define IB_EXCHANGE_PROTO_VERSION "1"
+
+#define IB_STOP_RECV_UNLESS(t, s)               \
+  if (!(t)) {                                   \
+    imagebabble::io::discard_remainder((s));    \
+    return false;                               \
+  }
 
 /** A lightweight C++ library to send and receive images via networks */
 namespace imagebabble {
@@ -147,6 +153,18 @@ namespace imagebabble {
       }
     };
 
+    /** Discards the remainder of a multi-part message */
+    inline void discard_remainder(zmq::socket_t &s) {
+      int more;
+      size_t more_size = sizeof(more);
+
+      s.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+      while (more > 0) {
+        s.recv(0, 0);
+        s.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+      }
+    }
+
     /** Generic receive method. Tries to receive a value of T from the given socket.
       * T must have locatable extraction semantics. This method will block until
       * at least one byte is readable from the socket or an error occurs. */
@@ -154,13 +172,14 @@ namespace imagebabble {
     inline bool recv(zmq::socket_t &s, T &v) 
     {
       zmq::message_t msg;
-      if (!s.recv(&msg))
-        return false;
+      IB_STOP_RECV_UNLESS(s.recv(&msg), s);
 
       in_memory_buffer mb(static_cast<char*>(msg.data()), msg.size());
       std::istream is(&mb);
       is >> v;    
 
+      IB_STOP_RECV_UNLESS(!is.fail(), s);
+      
       return true;
     }
 
@@ -168,20 +187,20 @@ namespace imagebabble {
     inline bool recv(zmq::socket_t &s, drop &v) 
     {
       zmq::message_t msg;
-      return s.recv(&msg);
+      IB_STOP_RECV_UNLESS(s.recv(&msg), s);
+      return true;
     }
 
     /** Receive a string. */
     inline bool recv(zmq::socket_t &s, std::string &v) 
     {
       zmq::message_t msg;
-      if (!s.recv(&msg)) {
-        return false;
-      } else {
-        v.assign(
-          static_cast<char*>(msg.data()), 
-          static_cast<char*>(msg.data()) + msg.size()); 
-      }
+      IB_STOP_RECV_UNLESS(s.recv(&msg), s);
+
+      v.assign(
+        static_cast<char*>(msg.data()), 
+        static_cast<char*>(msg.data()) + msg.size()); 
+
       return true;
     }
 
@@ -189,24 +208,21 @@ namespace imagebabble {
     template<class T>
     inline bool recv(zmq::socket_t &s, std::vector<T> &c)
     {
-      bool all_ok = true;
-
       size_t count;
-      all_ok &= io::recv(s, count);
-      
-      // Note, use resize to allow existing elements to be
-      // reused.
+      IB_STOP_RECV_UNLESS(io::recv(s, count), s);
+     
+      // Note, use resize to allow existing elements to be reused.
       c.resize(count);
 
       // Receive elements
-      for (size_t i = 0; i < count; ++i) {        
-        all_ok &= io::recv(s, c[i]);          
+      for (size_t i = 0; i < count; ++i) { 
+        IB_STOP_RECV_UNLESS(io::recv(s, c[i]), s);
       }
 
       // Array ends with empty element
-      all_ok &= io::recv(s, drop());
-      
-      return all_ok;
+      IB_STOP_RECV_UNLESS(io::recv(s, drop()), s);
+
+      return true;
     }
 
     /** Test if data to be read is pending on the socket. Returns true
@@ -401,8 +417,8 @@ namespace imagebabble {
         while(can_read) {
           // Receive ready requestes by clients
           std::string address;
-          io::recv(*_s, address);
-          io::recv(*_s, io::drop());
+          IB_STOP_RECV_UNLESS(io::recv(*_s, address), *_s);
+          IB_STOP_RECV_UNLESS(io::recv(*_s, io::drop()), *_s);
 
           clients.insert(address);
           can_read = io::is_data_pending(*_s, 0);

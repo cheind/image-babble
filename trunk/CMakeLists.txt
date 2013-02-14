@@ -43,7 +43,9 @@ if (Boost_FOUND)
   add_executable(
     test_imagebabble 
     tests/main.cpp
-    tests/test_reliable.cpp)
+    tests/test_reliable.cpp
+    tests/test_data_types.cpp
+    tests/test_image_support.cpp)
 
   target_link_libraries(test_imagebabble ${TEST_LIBS})
 
