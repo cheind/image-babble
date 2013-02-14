@@ -38,11 +38,11 @@
 #include <limits>
 #include <vector>
 #include <hash_set>
-#include <ctime>
 
 #define IMAGEBABBLE_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
 #define IMAGEBABBLE_EXCHANGE_PROTO_VERSION "1"
 
+/** A lightweight C++ library to send and receive images via networks */
 namespace imagebabble {
 
   /** Reference counted pointer to a ZMQ socket. */
@@ -50,16 +50,17 @@ namespace imagebabble {
   /** Reference counted pointer to a ZMQ context. */
   typedef std::shared_ptr<zmq::context_t> context_ptr;
 
-  /** Base class for objects communicating on networks */
+  /** Base class for objects communicating via networks. 
+    * Servers and clients shall derive from this base. */
   class network_entity {
   public:
 
-    /** Construct from context */
+    /** Construct from context. */
     network_entity(const context_ptr &c)
       :_ctx(c)
     {}
 
-    /** Basic destructor */
+    /** Destructor. */
     virtual ~network_entity()
     {}
 
@@ -74,7 +75,7 @@ namespace imagebabble {
     network_entity &operator = (const network_entity &);
   };
 
-  /** Base class for fast/reliable servers. */
+  /** Base class for servers. */
   class basic_server : public network_entity {
   public:
     
@@ -83,12 +84,9 @@ namespace imagebabble {
       : network_entity(c)
     {}    
 
-    /** Get bound address */
-    virtual const std::string &get_address() const = 0;
-
   };
 
-  /** Base class for fast/reliable clients. */
+  /** Base class for clients. */
   class basic_client : public network_entity {
   public:
     
@@ -99,14 +97,16 @@ namespace imagebabble {
 
   };
 
-  /** Simple stopwatch implementation. */
+  /** Stopwatch implementation. */
   class stopwatch {
   public:
-    /** Construct with start point */
+
+    /** Start stopwatch */
     inline stopwatch()
       : _handle(zmq_stopwatch_start()), _elapsed(0)
     {}
 
+    /** Destroy stopwatch */
     inline ~stopwatch()
     {
       zmq_stopwatch_stop(_handle);
@@ -124,13 +124,13 @@ namespace imagebabble {
     unsigned long _elapsed;
   };
 
-  /** Convenience send and receive functions for use with ZMQ */
+  /** Send and receive functions for data types. */
   namespace io {
     
-    /** Empty message to be sent */
+    /** Indicates to send an empty message. */
     struct empty {};
 
-    /** Drop message */
+    /** Indicator to discard next message part to be received. */
     typedef empty drop;
 
     /** Simple in-memory stream buffer. Allows to adapt an istream on an existing buffer. 
@@ -138,6 +138,8 @@ namespace imagebabble {
     class in_memory_buffer : public std::basic_streambuf<char>
     {
     public:
+
+      /** Construct from existing buffer. */
       inline in_memory_buffer(char* p, size_t n) 
       {
         setg(p, p, p + n);
@@ -146,7 +148,8 @@ namespace imagebabble {
     };
 
     /** Generic receive method. Tries to receive a value of T from the given socket.
-      * T must have stream input semantics. */
+      * T must have locatable extraction semantics. This method will block until
+      * at least one byte is readable from the socket or an error occurs. */
     template<class T>
     inline bool recv(zmq::socket_t &s, T &v) 
     {
@@ -161,14 +164,14 @@ namespace imagebabble {
       return true;
     }
 
-    /** Receive next part of message and discard. */
+    /** Read a message(part) from the socket and discard. */
     inline bool recv(zmq::socket_t &s, drop &v) 
     {
       zmq::message_t msg;
       return s.recv(&msg);
     }
 
-    /** Receive string. */
+    /** Receive a string. */
     inline bool recv(zmq::socket_t &s, std::string &v) 
     {
       zmq::message_t msg;
@@ -182,7 +185,7 @@ namespace imagebabble {
       return true;
     }
 
-    /** Receive array of items as vector */
+    /** Receive a vector of elements. */
     template<class T>
     inline bool recv(zmq::socket_t &s, std::vector<T> &c)
     {
@@ -201,20 +204,27 @@ namespace imagebabble {
       }
 
       // Array ends with empty element
-      io::recv(s, drop());
+      all_ok &= io::recv(s, drop());
       
       return all_ok;
     }
 
-    /** Test if data to receive is pending on the socket. */
-    inline bool is_data_pending(zmq::socket_t &s, int timeout)
+    /** Test if data to be read is pending on the socket. Returns true
+      * when at least one byte readable within the given timeout in milli
+      * seconds */
+    inline bool is_data_pending(zmq::socket_t &s, int timeout_ms)
     {
       zmq::pollitem_t items[] = {{ s, 0, ZMQ_POLLIN, 0 }};      
-      zmq::poll(&items[0], 1, timeout);
+      zmq::poll(&items[0], 1, timeout_ms);
       return (items[0].revents & ZMQ_POLLIN);      
     }
 
-    /** Generic send method. T must have stream output semantics. */
+    /** Generic send method. T must have insertion operator semantics. 
+      *
+      * \param[in] s socket to send data to
+      * \param[in] t data to send
+      * \param[in] flags ZMQ send flags.
+      */
     template<class T>
     inline bool send(zmq::socket_t &s, const T &v, int flags = 0) 
     {
@@ -247,7 +257,9 @@ namespace imagebabble {
       return s.send(msg, flags);    
     }
 
-    /** Send arra of elements*/
+    /** Send vector of elements. A vector is serialized into a multi-part message.
+      * First the number of elements is sent, then each element is sent in turn.
+      * Finally an empty message marks the end of vector. */
     template<class T>
     inline bool send(zmq::socket_t &s, const std::vector<T> &c, int flags = 0)
     {
@@ -265,7 +277,14 @@ namespace imagebabble {
     }
   }
 
-  /** Fast but unreliable image server implementation. */
+  /** Fast but unreliable server implementation. The fast server implementation is based
+    * on a publisher/subscriber pattern to fan out data to all connected clients. It
+    * avoids back-chatter which improves throughput. The basic guarantees for clients 
+    * are that they either receive the complete data published or no data at all.
+    *
+    * The server will drop messages when no clients are connected. Messages for clients
+    * in exceptional states are dropped as well. Expect to lose data when using the 
+    * fast server.*/
   class fast_server : public basic_server {
   public:
 
@@ -280,16 +299,17 @@ namespace imagebabble {
       shutdown();
     }
 
-    /** Start a new connection on the given endpoint. Any previous active connection will be closed. */
+    /** Start a new connection on the given endpoint. This method can be called
+      * multiple times to publish the same data on multiple endpoints.*/
     inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
-      shutdown();
-      _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
-      _s->bind(addr.c_str());
-      _addr = addr;
+      if (!_s) {
+        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
+      }
+      _s->bind(addr.c_str());      
     }
     
-    /** Shutdown server. */
+    /** Shutdown connections. Closes all previously bound endpoints. */
     inline void shutdown()
     {
       if (_s && _s->connected()) {
@@ -298,23 +318,30 @@ namespace imagebabble {
       }      
     }
 
-    /** Get bound address */
-    virtual const std::string &get_address() const {
-      return _addr;
-    }
-
-    /** Publish data */
+    /** Publish data to clients. Data to be published must either have
+      * a specific send method overload in the imagebabble::io namespace,
+      * or primitive output stream insertion (operator<<) semantics.
+      * 
+      * \param[in] t data to be published.
+      * \param[in] timeout_ms unused. Method returns always immediately.
+      * \param[in] min_serve unused. 
+      **/
     template<class T>
-    bool publish(const T &t, int timeout = 0, size_t min_serve = 0)
+    bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
     {
       return io::send(*_s, t);
     }
-
-  private:
-    std::string _addr;
   };
 
-  /** Reliable image server implementation. */
+  /** Reliable server implementation. The reliable server implementation is based
+    * on a request/reply pattern send data to a set of connected clients. It is reliable
+    * in the term that no data is lost due to filled queues on both ends.
+    * 
+    * When new data is to be published, it waits for the requested number of clients 
+    * to report readiness. If at least the specified number of clients gets ready in 
+    * the specified timeout interval, the data is sent to all clients. If not, no data 
+    * at all is sent.
+    */
   class reliable_server : public basic_server {
   public:
     /** Default constructor. */
@@ -328,16 +355,17 @@ namespace imagebabble {
       shutdown();
     }
 
-    /** Start a new connection on the given endpoint. Any previous active connection will be closed. */
+    /** Start a new connection on the given endpoint. This method can be called
+      * multiple times to publish the same data on multiple endpoints.*/
     inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
-      shutdown();
-      _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
-      _s->bind(addr.c_str());
-      _addr = addr;
+      if (!_s) {
+        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
+      }
+      _s->bind(addr.c_str());      
     }
     
-    /** Shutdown server. */
+    /** Shutdown connections. Closes all previously bound endpoints. */
     inline void shutdown()
     {
       if (_s && _s->connected()) {
@@ -346,13 +374,19 @@ namespace imagebabble {
       }      
     }
 
-    /** Get bound address */
-    const std::string &get_address() const {
-      return _addr;
-    }
-
+    /** Publish data to clients. Data to be published must either have
+      * a specific send method overload in the imagebabble::io namespace,
+      * or primitive output stream insertion (operator<<) semantics.
+      * 
+      * \param[in] t data to be published.
+      * \param[in] min_serve minimum number of clients to serve before returning.
+      * \param[in] timeout_ms maximum wait time in milliseconds for clients to get ready.
+      * \returns true  when successful
+      * \returns false when the minimum number of clients required did not get ready in
+      *                the specified timeout.
+      **/
     template<class T>
-    inline bool publish(const T &t, int timeout = -1, size_t min_serve = 1)
+    inline bool publish(const T &t, int timeout_ms = -1, size_t min_serve = 1)
     {
       typedef std::hash_set<std::string> client_set;
 
@@ -360,7 +394,7 @@ namespace imagebabble {
       stopwatch sw;
 
       bool continue_wait = true;
-      int wait_time = timeout;
+      int wait_time = timeout_ms;
 
       do {
         bool can_read = io::is_data_pending(*_s, wait_time);
@@ -373,32 +407,32 @@ namespace imagebabble {
           clients.insert(address);
           can_read = io::is_data_pending(*_s, 0);
         }
-        continue_wait = (timeout == -1 || ((int)sw.elapsed_msecs() < timeout));
+        continue_wait = (timeout_ms == -1 || ((int)sw.elapsed_msecs() < timeout_ms));
       } while ((clients.size() < min_serve) && continue_wait);
 
       if (clients.size() >= min_serve) {
         // Success, send to all clients
+        bool all_ok = true;
         std::hash_set<std::string>::iterator i = clients.begin();
         std::hash_set<std::string>::iterator i_end = clients.end();
 
         for (i; i != i_end; ++i) {
           // Construct package for client
-          io::send(*_s, *i, ZMQ_SNDMORE);
-          io::send(*_s, t);
+          bool send_ok = true;
+          send_ok &= io::send(*_s, *i, ZMQ_SNDMORE);
+          send_ok &= io::send(*_s, t);
+          all_ok &= send_ok;
         }
 
-        return true;
+        return all_ok;
       } else {
         // Failed, send to no clients at all
         return false;
       }
     }
-
-  private:
-    std::string _addr;
   };
 
-  /** Fast image client implementation. */
+  /** Fast client implementation. */
   class fast_client : public basic_client {
   public:
     /** Default constructor */
@@ -406,7 +440,8 @@ namespace imagebabble {
       : basic_client(context_ptr(new zmq::context_t(1)))
     {}
 
-    /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
+    /** Start a new connection to the given endpoint. If called multiple times, the client
+      * will connect to more endpoints. */      
     inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
       if (!_s) {
@@ -428,9 +463,20 @@ namespace imagebabble {
       }
     }
 
-    /** Receive a frame. */
+    /** Receive data. Data to be received must either have a specific
+      * imagebabble::io::recv method overload , or primitive output stream
+      * extraction (operator>>) semantics. 
+      *
+      * \warning You should not rely on receiving a single specific data element 
+      *          with the fast_client and fast_server implementation. Expect data to get lost.
+      *
+      * \param[ref] t data to be received
+      * \param[in] timeout_ms Maximum wait time in milliseconds to receive data.
+      * \returns true when successful
+      * \returns false when timeout occurred or receiving data failed.
+      */
     template<class T>
-    inline bool receive(T &t, int timeout = 0)
+    inline bool receive(T &t, int timeout_ms = 0)
     {
       if (!io::is_data_pending(*_s, timeout)) {
         return false;
@@ -441,7 +487,7 @@ namespace imagebabble {
 
   };
 
-  /** Reliable client implementation */
+  /** Reliable client implementation. */
   class reliable_client : public basic_client {
   public:
 
@@ -450,7 +496,8 @@ namespace imagebabble {
       : basic_client(context_ptr(new zmq::context_t(1)))
     {}
 
-    /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
+    /** Start a new connection to the given endpoint. If called multiple times, 
+      * the client will connect to more endpoints. */
     inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
       if (!_s) {
@@ -472,7 +519,18 @@ namespace imagebabble {
       }
     }
 
-    /** Receive a frame. */
+    /** Receive data. Data to be received must either have a specific
+      * imagebabble::io::recv method overload, or primitive output stream
+      * extraction (operator>>) semantics. 
+      *
+      * \warning You should not rely on receiving a single specific data element 
+      *          with the fast_client and fast_server implementation. Expect data to get lost.
+      *
+      * \param[ref] t data to be received
+      * \param[in] timeout_ms Maximum wait time in milliseconds to receive data.
+      * \returns true when successful
+      * \returns false when timeout occurred or receiving data failed.
+      */
     template<class T>
     bool receive(T &t, int timeout = -1) 
     {
