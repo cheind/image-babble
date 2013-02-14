@@ -183,6 +183,8 @@ namespace imagebabble {
       size_t count;
       all_ok &= io::recv(s, count);
       
+      // Note, use resize to allow existing elements to be
+      // reused.
       c.resize(count);
 
       // Receive elements
@@ -271,7 +273,7 @@ namespace imagebabble {
     }
 
     /** Start a new connection on the given endpoint. Any previous active connection will be closed. */
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
+    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
       shutdown();
       _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
@@ -318,7 +320,7 @@ namespace imagebabble {
     }
 
     /** Start a new connection on the given endpoint. Any previous active connection will be closed. */
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
+    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
       shutdown();
       _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
@@ -395,7 +397,7 @@ namespace imagebabble {
     {}
 
     /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
+    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
@@ -438,7 +440,7 @@ namespace imagebabble {
     {}
 
     /** Start a new connection to the given endpoint. Previous connections are closed when called multiple times. */      
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:5562")
+    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
