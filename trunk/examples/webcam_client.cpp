@@ -26,7 +26,8 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-#include <imagebabble.hpp>
+#include <imagebabble\core.hpp>
+#include <imagebabble\image_support.hpp>
 #include <opencv2\opencv.hpp>
 #include <iostream>
 
@@ -39,23 +40,17 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  // Start server
-  ib::fast_image_client ic;
+  ib::fast_client ic;
   ic.startup(argv[1]);
   
-  ib::frame f;
-  while (ic.receive(f, 5000)) {
+  ib::image i;
+  while (ic.receive(i, 5000)) {
 
-    cv::Mat img;
-    
-    ib::image_header &ih = f.get_image_headers().front();
-    ib::image_data &id = f.get_image_data().front();
+    cv::Mat img(i.get_height(), i.get_width(), CV_8UC3);
+    i.copy_to(img.ptr());
 
-    img.create(ih.get_height(), ih.get_width(), CV_8UC3);
-    id.copy_data(img.ptr(), img.step * img.rows);
-    
-    cv::imshow("cam", img);
-    cv::waitKey(5);    
+    cv::imshow("image", img);
+    cv::waitKey(1);
   }
 
   ic.shutdown();

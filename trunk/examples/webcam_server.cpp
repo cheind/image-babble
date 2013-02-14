@@ -26,8 +26,8 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-
-#include <imagebabble.hpp>
+#include <imagebabble\core.hpp>
+#include <imagebabble\image_support.hpp>
 #include <opencv2\opencv.hpp>
 #include <iostream>
 
@@ -43,7 +43,8 @@ int main(int argc, char *argv[])
   // Open video device
 
   cv::VideoCapture vc;
-  vc.open(0);
+  vc.set(CV_CAP_PROP_FPS, 10.0);
+  vc.open("Wildlife.wmv");
 
   if (!vc.isOpened()) {
     std::cerr << "Failed to open video device" << std::endl;
@@ -51,22 +52,18 @@ int main(int argc, char *argv[])
   }
 
   // Start server
-  ib::fast_image_server is;
+  ib::fast_server is;
   is.startup(argv[1]);
 
   cv::Mat img;
   
   while (vc.grab()) {
+    
     vc.retrieve(img);
 
-    ib::image_header ih(img.cols, img.rows, 3, 1, "");
-    ib::image_data id(img.ptr(), ih.get_total_bytes(), ib::copy_mem());
+    ib::image i(img.cols, img.rows, 3, img.ptr(), ib::image::copy_mem());
 
-    ib::frame f;
-    f.append_image_header(std::move(ih));
-    f.append_image_data(std::move(id));
-
-    is.publish(f);
+    is.publish(i);
   }
 
   is.shutdown();
