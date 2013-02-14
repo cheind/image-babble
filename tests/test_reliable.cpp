@@ -31,6 +31,8 @@
 #include <imagebabble/core.hpp>
 #include <boost/thread.hpp>
 
+
+
 BOOST_AUTO_TEST_SUITE(test_core)
 
 namespace ib = imagebabble;
@@ -145,8 +147,11 @@ BOOST_AUTO_TEST_CASE(no_clients)
     ib::reliable_server s;
     s.startup();
 
+    ib::stopwatch sw;
     if (s.publish(1, 2000, 1))
       sum_sent += 1;
+
+    BOOST_CHECK_GE(sw.elapsed_msecs(), 2000u);
 
     s.shutdown();
 
@@ -156,5 +161,6 @@ BOOST_AUTO_TEST_CASE(no_clients)
 
   BOOST_REQUIRE(sum_sent == 0);
 }
+
 
 BOOST_AUTO_TEST_SUITE_END()
