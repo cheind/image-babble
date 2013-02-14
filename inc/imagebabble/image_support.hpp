@@ -30,13 +30,19 @@
 #define __IMAGE_BABBLE_IMAGE_SUPPORT_HPP_INCLUDED__
 
 #include "core.hpp"
+#include <string>
+#include <vector>
 
 namespace imagebabble {
 
   class image;
+  class image_group;
+
   namespace io {
     bool send(zmq::socket_t &, const image &, int);
     bool recv(zmq::socket_t &, image &);
+    bool send(zmq::socket_t &, const image_group &, int);
+    bool recv(zmq::socket_t &, image_group &);
   };
   
   /** Image datatype */
@@ -58,6 +64,13 @@ namespace imagebabble {
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
     }
+
+    /** Construct a data buffer from existing memory. The implementation
+      * does not take ownership of the passed memory bock. Freeing it is
+      * a responsibility of the caller. */
+    inline explicit image(int w, int h, int bbp) 
+      : _msg(w*h*bbp), _w(w), _h(h), _bbp(bbp), _shared_mem(false)
+    {}
   
     /** Construct a data buffer from existing memory. The implementation
       * does not take ownership of the passed memory bock. Freeing it is
@@ -154,6 +167,105 @@ namespace imagebabble {
     bool _shared_mem;
   };
   
+  class image_group {
+  public:
+    inline image_group() 
+    {}
+
+    inline image_group( const std::string &id) 
+      : _id(id)
+    {}
+
+#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+
+    /** Move constructor */
+    inline image_group(image_group &&rhs)
+      : _images(std::move(rhs._images)), _names(rhs._names), _id(rhs._id)
+    {}
+
+    /** Move assignment operator */
+    inline image_group& operator=(image_group &&rhs)
+    {
+      if (this != &rhs) {
+        _images = std::move(rhs._images);
+        _names = std::move(rhs._names);
+        _id = std::move(rhs._id);        
+      }
+      return *this;
+    }
+
+    /** Move add image */
+    inline void add_image(image &&i, std::string &&name = std::string())
+    {
+      _images.push_back(i);
+      _names.push_back(name);
+    }
+
+#endif
+
+    inline void add_image(const image &i, const std::string &name = std::string())
+    {
+      _images.push_back(i);
+      _names.push_back(name);
+    }
+
+    inline void clear() 
+    {
+      _images.clear();
+      _names.clear();
+    }
+
+    inline size_t size() const 
+    {
+      return _names.size();
+    }
+
+    inline const std::vector<image> &get_images() const
+    {
+      return _images;
+    }
+
+    inline std::vector<image> &get_images() 
+    {
+      return _images;
+    }
+
+    inline const std::vector<std::string> &get_names() const
+    {
+      return _names;
+    }
+
+    inline std::vector<std::string> &get_names() 
+    {
+      return _names;
+    }
+
+    inline const std::string &get_id() const 
+    {
+      return _id;
+    }
+
+    inline std::string &get_id() 
+    {
+      return _id;
+    }
+
+    inline void set_id(const std::string &id) 
+    {
+      _id = id;
+    }
+
+  private:
+    
+    friend bool io::send(zmq::socket_t &, const image_group &, int);
+    friend bool io::recv(zmq::socket_t &, image_group &);
+
+    std::vector<image> _images;
+    std::vector<std::string> _names;
+    std::string _id;
+  };
+
+
   namespace io {
     
     /** Send image. */
@@ -195,6 +307,31 @@ namespace imagebabble {
       } else {
         all_ok &= s.recv(&v._msg);
       }
+
+      return all_ok;
+    }
+
+    /** Send image group. */
+    inline bool send(zmq::socket_t &s, const image_group &v, int flags = 0) 
+    {
+      bool all_ok = true;
+      
+      all_ok &= io::send(s, v.get_id(), ZMQ_SNDMORE);
+      all_ok &= io::send(s, v.get_names(), ZMQ_SNDMORE);
+      all_ok &= io::send(s, v.get_images(), flags);
+
+      return all_ok;
+    }
+
+    /** Receive image group. */
+    inline bool recv(zmq::socket_t &s, image_group &v) 
+    {
+
+      bool all_ok = true;
+
+      all_ok &= io::recv(s, v._id);
+      all_ok &= io::recv(s, v._names);
+      all_ok &= io::recv(s, v._images);
 
       return all_ok;
     }
