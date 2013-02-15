@@ -4,10 +4,10 @@
 # Project related configuration options
 #---------------------------------------------------------------------------
 DOXYFILE_ENCODING      = UTF-8
-PROJECT_NAME           = "ImageBabble"
+PROJECT_NAME           = "Image-Babble"
 PROJECT_NUMBER         =
 PROJECT_BRIEF          = "A lightweight C++ library to send and receive images via networks."
-PROJECT_LOGO           =
+PROJECT_LOGO           = @CMAKE_CURRENT_SOURCE_DIR@/etc/ImageBabble_64.png
 OUTPUT_DIRECTORY       = @PROJECT_BINARY_DIR@/Documentation
 CREATE_SUBDIRS         = NO
 OUTPUT_LANGUAGE        = English
@@ -98,18 +98,19 @@ WARN_LOGFILE           =
 # configuration options related to the input files
 #---------------------------------------------------------------------------
 INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@/inc/imagebabble/ \
+                         @CMAKE_CURRENT_SOURCE_DIR@/examples/ \
                          @CMAKE_CURRENT_SOURCE_DIR@/doc/mainpage.doxy
 INPUT_ENCODING         = UTF-8
-FILE_PATTERNS          = *.hpp
+FILE_PATTERNS          = *.hpp *.cpp
 RECURSIVE              = NO
 EXCLUDE                =
 EXCLUDE_SYMLINKS       = NO
 EXCLUDE_PATTERNS       =
 EXCLUDE_SYMBOLS        = zmq::*
-EXAMPLE_PATH           = @CMAKE_CURRENT_SOURCE_DIR@/examples
+EXAMPLE_PATH           = @CMAKE_CURRENT_SOURCE_DIR@/examples/
 EXAMPLE_PATTERNS       = *.cpp
-EXAMPLE_RECURSIVE      = NO
-IMAGE_PATH             =
+EXAMPLE_RECURSIVE      = YES
+IMAGE_PATH             = @CMAKE_CURRENT_SOURCE_DIR@/etc/
 INPUT_FILTER           =
 FILTER_PATTERNS        =
 FILTER_SOURCE_FILES    = NO

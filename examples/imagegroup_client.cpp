@@ -1,5 +1,5 @@
-/*! \file webcam_client.cpp
-    \example webcam_client.cpp
+/*! \file imagegroup_client.cpp
+    \example imagegroup_client.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -38,24 +38,35 @@ int main(int argc, char *argv[])
 
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " address" << std::endl;
-    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
     return -1;
   }
 
-  ib::fast_client ic;
+  ib::reliable_client ic;
   ic.startup(argv[1]);
-  
-  ib::image i;
-  while (ic.receive(i, 5000)) {
 
-    cv::Mat img(i.get_height(), i.get_width(), CV_8UC3);
-    i.copy_to(img.ptr());
+  ib::image_group g;
+  if (ic.receive(g, 5000)) {
 
-    cv::imshow("image", img);
-    cv::waitKey(1);
+    std::vector<ib::image> &images = g.get_images();
+    std::vector<std::string> &names = g.get_names();
+
+    for (size_t i = 0; i < images.size(); ++i) {
+
+      // Convert to OpenCV without copying data
+      cv::Mat img(
+        images[i].get_height(), 
+        images[i].get_width(), 
+        CV_8UC3, 
+        images[i].ptr<void>());
+
+      cv::imshow(names[i], img);      
+    }
+
   }
 
   ic.shutdown();
+
+  cv::waitKey();
   
   return 0;
 }

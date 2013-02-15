@@ -1,5 +1,5 @@
-/*! \file webcam_client.cpp
-    \example webcam_client.cpp
+/*! \file imagegroup_server.cpp
+    \example imagegroup_server.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -27,7 +27,10 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
+/** [Include Statement] */
 #include <imagebabble/imagebabble.hpp>
+/** [Include Statement] */
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
@@ -37,25 +40,34 @@ int main(int argc, char *argv[])
   namespace ib = imagebabble;
 
   if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " address" << std::endl;
-    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
     return -1;
   }
 
-  ib::fast_client ic;
-  ic.startup(argv[1]);
-  
-  ib::image i;
-  while (ic.receive(i, 5000)) {
+  // Load a bunch of images
+  cv::Mat i[2];
+  i[0] = cv::imread("image_0.png");
+  i[1] = cv::imread("image_1.png");
 
-    cv::Mat img(i.get_height(), i.get_width(), CV_8UC3);
-    i.copy_to(img.ptr());
-
-    cv::imshow("image", img);
-    cv::waitKey(1);
+  if (i[0].empty() || i[1].empty()) {
+    std::cerr << "Could not find images" << std::endl;
+    return -1;
   }
 
-  ic.shutdown();
+  // Start server
+  ib::reliable_server is;
+  is.startup(argv[1]);
+
+  // Form group
+  ib::image_group g;
+  g.add_image(ib::image(i[0].cols, i[0].rows, i[0].elemSize(), i[0].ptr(), ib::share_mem()), "first");
+  g.add_image(ib::image(i[1].cols, i[1].rows, i[1].elemSize(), i[1].ptr(), ib::share_mem()), "second");
+
+  // Publish
+  is.publish(g);
+
+  // Shutdown
+  is.shutdown();
   
   return 0;
 }

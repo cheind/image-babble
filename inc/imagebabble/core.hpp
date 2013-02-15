@@ -59,6 +59,10 @@ namespace imagebabble {
   typedef std::shared_ptr<zmq::socket_t> socket_ptr;
   /** Reference counted pointer to a ZMQ context. */
   typedef std::shared_ptr<zmq::context_t> context_ptr;
+  /** Indicator to intruct reuse of existing memory */
+  struct share_mem {};
+  /** Indicator to instruct copy from existing memory */
+  struct copy_mem {};
 
   /** Base class for objects communicating via networks. 
     * Servers and clients shall derive from this base. */

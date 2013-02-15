@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
 
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
+    std::cerr << "Example: " << argv[0] << "tcp://127.0.0.1:6000" << std::endl;
     return -1;
   }
 
@@ -59,7 +60,7 @@ int main(int argc, char *argv[])
 
     vc.retrieve(img);
 
-    ib::image i(img.cols, img.rows, 3, img.ptr(), ib::image::copy_mem());
+    ib::image i(img.cols, img.rows, img.elemSize(), img.ptr(), ib::copy_mem());
     
     is.publish(i);
   }
