@@ -1,4 +1,5 @@
 /*! \file webcam_server.cpp
+    \example webcam_server.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -26,45 +27,45 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
+/** [Include Statement] */
 #include <imagebabble/imagebabble.hpp>
+/** [Include Statement] */
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+/** [Example] */
 int main(int argc, char *argv[]) 
 {
   namespace ib = imagebabble;
 
   if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " address" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
     return -1;
   }
 
-  // Open video device
-
-  cv::VideoCapture vc;
-  vc.open(0);
+  cv::VideoCapture vc(0);
+  cv::Mat img;
 
   if (!vc.isOpened()) {
     std::cerr << "Failed to open video device" << std::endl;
     return -1;
   }
 
-  // Start server
   ib::fast_server is;
   is.startup(argv[1]);
-
-  cv::Mat img;
   
   while (vc.grab()) {
-    
+
     vc.retrieve(img);
 
     ib::image i(img.cols, img.rows, 3, img.ptr(), ib::image::copy_mem());
-
+    
     is.publish(i);
   }
 
   is.shutdown();
-
-	return -1;
+  
+  return 0;
 }
+/** [Example] */

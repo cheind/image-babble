@@ -39,9 +39,13 @@
 #include <vector>
 #include <hash_set>
 
+/** Whether the compiler supports move constructors and assignment operators. */
 #define IB_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
-#define IB_EXCHANGE_PROTO_VERSION "1"
 
+/** The version number of the exchange protocol implementation.  */
+#define IB_EXCHANGE_PROTO_VERSION 1
+
+/** Utility macro to clean-up if receiving data failed. */
 #define IB_STOP_RECV_UNLESS(t, s)               \
   if (!(t)) {                                   \
     imagebabble::io::discard_remainder((s));    \
@@ -71,8 +75,8 @@ namespace imagebabble {
     {}
 
   protected:    
-    context_ptr _ctx;
-    socket_ptr _s;
+    context_ptr _ctx; ///< ZMQ context
+    socket_ptr _s;    ///< ZMQ socket
 
   private:
     /** Disabled copy constructor */
@@ -238,7 +242,7 @@ namespace imagebabble {
     /** Generic send method. T must have insertion operator semantics. 
       *
       * \param[in] s socket to send data to
-      * \param[in] t data to send
+      * \param[in] v data to send
       * \param[in] flags ZMQ send flags.
       */
     template<class T>
@@ -338,9 +342,9 @@ namespace imagebabble {
       * a specific send method overload in the imagebabble::io namespace,
       * or primitive output stream insertion (operator<<) semantics.
       * 
-      * \param[in] t data to be published.
-      * \param[in] timeout_ms unused. Method returns always immediately.
-      * \param[in] min_serve unused. 
+      * \param [in] t data to be published.
+      * \param [in] timeout_ms unused. Method returns always immediately.
+      * \param [in] min_serve unused. 
       **/
     template<class T>
     bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
@@ -394,9 +398,9 @@ namespace imagebabble {
       * a specific send method overload in the imagebabble::io namespace,
       * or primitive output stream insertion (operator<<) semantics.
       * 
-      * \param[in] t data to be published.
-      * \param[in] min_serve minimum number of clients to serve before returning.
-      * \param[in] timeout_ms maximum wait time in milliseconds for clients to get ready.
+      * \param [in] t data to be published.
+      * \param [in] min_serve minimum number of clients to serve before returning.
+      * \param [in] timeout_ms maximum wait time in milliseconds for clients to get ready.
       * \returns true  when successful
       * \returns false when the minimum number of clients required did not get ready in
       *                the specified timeout.
@@ -486,8 +490,8 @@ namespace imagebabble {
       * \warning You should not rely on receiving a single specific data element 
       *          with the fast_client and fast_server implementation. Expect data to get lost.
       *
-      * \param[ref] t data to be received
-      * \param[in] timeout_ms Maximum wait time in milliseconds to receive data.
+      * \param [in,out] t data to be received
+      * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
       * \returns true when successful
       * \returns false when timeout occurred or receiving data failed.
       */
@@ -542,8 +546,8 @@ namespace imagebabble {
       * \warning You should not rely on receiving a single specific data element 
       *          with the fast_client and fast_server implementation. Expect data to get lost.
       *
-      * \param[ref] t data to be received
-      * \param[in] timeout_ms Maximum wait time in milliseconds to receive data.
+      * \param [in,out] t data to be received
+      * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
       * \returns true when successful
       * \returns false when timeout occurred or receiving data failed.
       */
@@ -551,7 +555,9 @@ namespace imagebabble {
     bool receive(T &t, int timeout_ms = -1) 
     {
       // Send ready
-      io::send(*_s, io::empty());
+      if(!io::send(*_s, io::empty())) {
+        return false;
+      }
 
       // Wait for reply
       if (!io::is_data_pending(*_s, timeout_ms)) {

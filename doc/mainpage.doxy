@@ -1,89 +1,164 @@
-/*! \file imagebabble.hpp
+/*! \mainpage ImageBabble
     \brief A small and efficient library to send and receive images over networks.
+    \tableofcontents
 
     \section Introduction Introduction
+    ImageBabble is a lightweight C++ library for efficient exchange of image data over networks. 
+    The library targets applications in which services need to send large amount (image)data 
+    to multiple clients. ImageBabble is designed for      
+      - <b>fast exchange</b> The libary supports a fast stream based data exchange model.
+      - <b>reliable exchange</b> The libary also supports a reliable data exchange model.
+      - <b>extensibility</b> Adding new data-types to be exchanged is easily possible.
+    
+    \section FirstExample Example
 
-    \section ExecutionModels Execution Models
-    ImageBabble supports two execution models that map to two distinct use-cases.
+    The following example demonstrates streaming of webcam data using ImageBabble. \note the example makes use of <a href="http://opencv.willowgarage.com/wiki/OpenCV">OpenCV</a>
+    to access  video devices. The libary itself does not need OpenCV to run.
+    
+    First, make sure to include the library headers
 
-    \subsection FastModel Fast Execution Model
-    By default a fast publisher/subscriber pattern is used which avoids back-chatter. 
-    The characteristics are:
+    \snippet webcam_server.cpp Include Statement
+
+    Next, write the code.
+
+    \snippet webcam_server.cpp Example
+
+    The client side is equally trivial to implement.
+
+    \snippet webcam_client.cpp Example
+
+    \section Installation Installation
+    This section will guide you to setup your development environment to get started with ImageBabble.
+
+    \subsection Prerequisites Prerequisites
+    In order to use ImageBabble will need some pre-requisites.
+     - ImageBabble is based on <a href="http://www.zeromq.org/">ZeroMQ</a>. In order to use it, you will
+       need to have ZeroMQ >= 3.2.2 installed. It might work with 2.x versions as well, but we haven't yet
+       tested. For later reference we will call the installation directory of ZeroMQ <code>ZMQ_ROOT</code>.
+
+     - ImageBabble uses a couple of modern C++ features. You will need a compiler that supports the following
+       <a href="http://en.wikipedia.org/wiki/C%2B%2B11">C++11</a> features: std::unordered_set, std::shared_ptr
+       and rvalue references. To our knowledge GCC >= 4.2 and MSVC >= 10 should be ok.
+
+     - ImageBabble itself. ImageBabble comes as a header-only implementation, so all you need to do is download/
+       checkout ImageBabble to local directory of your choice. For later reference we will call this directory 
+       <code>IMAGEBABBLE_ROOT</code>.
+
+    \subsection CompilingLinking Compiling and Linking
+    In order to use ImageBabble successfully from within your project, add the following include directories.
+
+    \verbatim 
+    <IMAGEBABBLE_ROOT>/inc 
+    <ZMQ_ROOT>/include 
+    \endverbatim
+
+    Next, for the linking step you need to tell the linker to link against ZeroMQ Library. On Windows platforms, 
+    you need to choose the correct configuration (debug/release) and MSVC version file. So, for example when
+    using ZMQ 3.2.2 within a project created in MSVC10 (Microsoft Visual Studio 10) in release mode, you should 
+    link against
+
+    \verbatim <ZMQ_ROOT>/lib/libzmq-v100-mt-3_2_2.lib \endverbatim
+
+    When you run your code, don't forget to copy the DLL (Windows only) to the executing directory
+
+    \verbatim <ZMQ_ROOT>/lib/libzmq-v100-mt-3_2_2.dll \endverbatim
+   
+    \section ExchangeModes Exchange Modes
+    ImageBabble transmits atomic messages such as images. The basic guarantee given by this framework
+    is that either a complete messaage is received or no message at all. ImageBabble supports two message 
+    exchange modes that map to two distinct use-cases.
+
+    \subsection FastMode Fast Exchange Mode
+    The fast exchange mode is best used when a lot of data is to be broadcast by the server to
+    many clients and eventual message losts are acceptable. The fast exchange mode is based on 
+    a publisher/subscriber pattern which avoids back-chatter. Its characteristics in detail are:
      - the server fans out frames to all connected clients,
      - the server does not block when no clients are connected,
      - the server does not care about processing speeds of clients,
 
-    In the fast mode you should expect to lose frames at the client side. This frames can
-    be lost at any time during the course of sending data. Expect it, it will happen.
+    \note you should expect to lose frames at the client side when using the fast mode. Data can
+    be lost at any time during the course of sending data. Expect it, it will happen. If that is
+    not acceptable with your use-case, see \ref ReliableMode
         
     The fast protocol is thus best used when you want to transmit a lot images and when you 
     don't care about lost messages. This could be the case for streaming real-time image data 
     from a web-cam.
+
+    \see imagebabble::fast_server
+    \see imagebabble::fast_client
     
-    \subsection ReliableModel Reliable Execution Model
-    The second model supported is more reliable. It uses back-chatter to solve many of the 
-    deficiencies of the fast model, thereby accepting a loss of performance in terms of 
-    throughput. The characteristics are:
-     - the server sends frames to one connected client,
-     - the server waits for one client to connect/reconnect,
-     - the server waits for one client to be ready to receive next frame.
+    \subsection ReliableMode Reliable Exchange Mode
+    The second supported exchange mode is more reliable. It uses back-chatter to solve many of the 
+    deficiencies of the fast model, thereby accepting a loss of performance. The characteristics are:
+     - the server waits for a specified minimum number of clients to signal ready
+     - the server does not send anything when the number of ready clients is not reached within the specified timeout slot 
+     - the server sends data to all ready clients otherwise.
     
-    In the reliable mode you will not lose frames at the client side, except more than 
-    one client is connected. Since each connection should only deal with one client, the server
-    supports creating multiple connections to deal with more than one client. In case multiple
-    connection are used, publishing frames will block until all connections have received the data.
+    \note in the reliable mode you will not lose frames at the client side due to full network queues. You might still lose 
+    messages when a client disconnects after it signaled readiness.
+
+    The reliable protocol is thus best used when you want to transmit a specific short sequence of images to at 
+    least one client.
+
+    \see imagebabble::reliable_server
+    \see imagebabble::reliable_client
     
-    \section NetworkProtocols Network Protocol
-    The ImageBabble library is based on ZMQ. ZMQ is not a neutral carrier, but
+    \subsection NetworkProtocols Network Protocol
+    The ImageBabble library is based on ZeroMQ. ZeroMQ is not a neutral carrier, but
     implements its functionality based on protocol named ZMTP that sits on top
     of network protocols such as TCP.
 
-    Each frame published by the server consists of 0..n image headers and 
-    0..n image data blocks. ImageBabble utilizes multi-part messages to represent
-    a frame. The structure of a frame is as follows (each new field represents a
-    unique message part).
-    
-    \verbatim
-      frame_id [, num_headers, header*, num_buffers, buffer*, empty]
-    \endverbatim
+    \section AdvancedTopics Advanced Topics
+    Here are a couple of advanced topics not covered in other sections.
 
-    A few notes:
-    
-    All parts except for the actual data buffers are sent as strings. The buffer is sent as given 
-    by the caller. Since the buffer is sent uninterpreted, no network byte-order conversion is 
-    performed at the library level. It remains in the responsibility of the caller to ensure 
-    correct conversion at the server/client interface. Since many systems now-a-days are 
-    little-endian this approach seems reasonable and avoids unnecessary operations.
+    \subsection ImageGroups Sending and Receiving Image Groups
+    In computer vision related applications it is often necessary, to transmit multiple images at once. Think
+    about a modern RGBD camera, it provides an RGB and depth image at the same time. What you'd like todo is
+    to pack those two images together and transmit it atomically as a single message. 
 
-    From the specification it is legal to transmit no image headers at all. This is meant as
-    an advanced possibility to transmit less data on the network. It is useful only when the
-    format of the image data to be sent is known in advance at the client side and does not
-    change during the course of transmission.
+    Luckily, ImageBabble provides imagebabble::image_group for exactly this use-case. It allows you to pack
+    multiple (named) images together and send/receive the group at once.
 
-    In case the frame_id is negative, no more message parts are send. Negative frame numbers
-    indicate a client shutdown request or error at the server.
+    \subsection CustomDataTypes Transmitting Custom Data Types
+    Despite the fact ImageBabble was designed with image exchange in mind, it is not limited to image related
+    use-cases. To the contrary you can transmit custom data types as long as you provide the necessary 
+    serialization methods.
+
+    \subsection ConnectingMultipleEndpoints Connecting to Multiple Endpoints
+    Clients in the ImageBabble library have the possibility to receive data from multiple servers. In order to
+    activate this behaviour, you would just call the imagebabble::fast_client::startup / imagebabble::reliable_client::startup method 
+    multiple times. 
+
+    Similarily you can call imagebabble::fast_server::startup / imagebabble::reliable_server::startup multiple times to publish data on
+    multiple endpoints at once.
 
     \section Copyright Copyright Notice
+    ImageBabble is provided for free under term of the new BSD license.
 
     \verbatim
-    Copyright (c) 2013 Christoph Heindl
-    
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to
-    deal in the Software without restriction, including without limitation the
-    rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-    sell copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
+    Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
+    All rights reserved.
 
-    The above copyright notice and this permission notice shall be included in
-    all copies or substantial portions of the Software.
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+        * Redistributions of source code must retain the above copyright
+          notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+        * Neither the name of PROFACTOR GmbH nor the
+          names of its contributors may be used to endorse or promote products
+          derived from this software without specific prior written permission.
 
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-    IN THE SOFTWARE.
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+    ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+    DISCLAIMED. IN NO EVENT SHALL PROFACTOR GmbH BE LIABLE FOR ANY
+    DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+    ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
     \endverbatim
 */

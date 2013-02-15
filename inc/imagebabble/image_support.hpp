@@ -45,55 +45,54 @@ namespace imagebabble {
     bool recv(zmq::socket_t &, image_group &);
   };
   
-  /** Image datatype */
+  /** Represents a generic image. */
   class image {
   public:
+    /** Indicator to tell ImageBabble to reuse existing memory */
     struct share_mem {};
+    /** Indicator to tell ImageBabble to copy from existing memory */
     struct copy_mem {};
 
-    /** Construct an empty image data buffer */
+    /** Construct a new image. */
     inline image()
       : _w(0), _h(0), _bbp(0), _shared_mem(false)
     {}
 
-    /** Construct a data buffer by copying from the given buffer. 
-      * The constructor does not copy the data but instead increase its
-      * reference count. */
-    inline image(const image &other) 
+    /** Construct a new image. The implementation will copy the header 
+      * information and share the buffer by incrementing its reference count. */
+    inline explicit image(const image &other) 
       : _w(other._w), _h(other._h), _bbp(other._bbp), _shared_mem(other._shared_mem)
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
     }
 
-    /** Construct a data buffer from existing memory. The implementation
-      * does not take ownership of the passed memory bock. Freeing it is
-      * a responsibility of the caller. */
+    /** Construct a new image. Allocates the necessary image data buffer size. */
     inline explicit image(int w, int h, int bbp) 
       : _msg(w*h*bbp), _w(w), _h(h), _bbp(bbp), _shared_mem(false)
     {}
   
-    /** Construct a data buffer from existing memory. The implementation
-      * does not take ownership of the passed memory bock. Freeing it is
-      * a responsibility of the caller. */
+    /** Construct a new image. The implementation does not take ownership of the passed 
+      * bock. Freeing it is a responsibility of the caller. */
     inline explicit image(int w, int h, int bbp, void *data, const share_mem &) 
       : _msg(data, w*h*bbp, null_deleter, 0), _w(w), _h(h), _bbp(bbp), _shared_mem(true)
     {}
 
-    /** Construct a data buffer from existing memory.*/
+    /** Construct a new image. The implementation will copy the data given. The newly
+      * allocated buffer will be released when its reference count hits zero. */
     inline explicit image(int w, int h, int bbp, void *data, const copy_mem &) 
       : _msg(w*h*bbp), _w(w), _h(h), _bbp(bbp), _shared_mem(false)
     {
       memcpy(_msg.data(), data, w*h*bbp);      
     }
 
-#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+#ifdef IB_HAS_RVALUE_REFS
 
-    /** Move constructor */
+    /** Construct a new image. Renders the source invalid. */
     inline image(image &&rhs)
       : _msg(std::move(rhs._msg)), _shared_mem(rhs._shared_mem), _w(rhs._w), _h(rhs._h), _bbp(rhs._bbp)
     {}
 
-    /** Move assignment operator */
+    /** Move assignment operator. Renders the source invalid. */
     inline image& operator=(image &&rhs)
     {
       if (this != &rhs) {
@@ -107,8 +106,8 @@ namespace imagebabble {
     }
 #endif
 
-    /** Assign from other buffer. The implementation does not copy the data 
-      * but instead increase its reference count. */
+    /** Assign from other buffer. The implementation will copy the header 
+      * information and share the buffer by incrementing its reference count. */
     inline image &operator=(const image &rhs) 
     {
       if (this != &rhs) {
@@ -141,13 +140,25 @@ namespace imagebabble {
       return _msg.size();
     }
 
-    /** Get resolution in x dimension */
-    inline int get_width() const { return _w; }
-    /** Get resolution in y dimension */
-    inline int get_height() const { return _h; }
-    /** Get number of bytes per channel channels */
-    inline int get_bytes_per_pixel() const { return _bbp; }
+    /** Get the number of pixels in width. */
+    inline int get_width() const 
+    { 
+      return _w; 
+    }
 
+    /** Get the number of pixels in height. */
+    inline int get_height() const 
+    { 
+      return _h; 
+    }
+
+    /** Get number of bytes per pixel. */
+    inline int get_bytes_per_pixel() const 
+    { 
+      return _bbp; 
+    }
+
+    /** Copy image data buffer to given destination. */
     inline void copy_to(void *dst) const 
     {
       memcpy(dst, _msg.data(), size());
@@ -167,23 +178,27 @@ namespace imagebabble {
     bool _shared_mem;
   };
   
+  /** A collection of images to be sent/received at once. */
   class image_group {
   public:
+
+    /** Construct a new image group. */
     inline image_group() 
     {}
 
+    /** Construct a new image group. */
     inline image_group( const std::string &id) 
       : _id(id)
     {}
 
-#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+#ifdef IB_HAS_RVALUE_REFS
 
-    /** Move constructor */
+    /** Construct a new image group. */
     inline image_group(image_group &&rhs)
       : _images(std::move(rhs._images)), _names(rhs._names), _id(rhs._id)
     {}
 
-    /** Move assignment operator */
+    /** Move assignment operator.  */
     inline image_group& operator=(image_group &&rhs)
     {
       if (this != &rhs) {
@@ -194,7 +209,7 @@ namespace imagebabble {
       return *this;
     }
 
-    /** Move add image */
+    /** Move append named image. */
     inline void add_image(image &&i, std::string &&name = std::string())
     {
       _images.push_back(i);
@@ -203,53 +218,63 @@ namespace imagebabble {
 
 #endif
 
+    /** Append a named image. */
     inline void add_image(const image &i, const std::string &name = std::string())
     {
       _images.push_back(i);
       _names.push_back(name);
     }
 
+    /** Clear images and names. */
     inline void clear() 
     {
       _images.clear();
       _names.clear();
     }
 
+    /** Get the number of named images */
     inline size_t size() const 
     {
       return _names.size();
     }
 
+    /** Get the image collection. */
     inline const std::vector<image> &get_images() const
     {
       return _images;
     }
 
+    /** Get the image collection. */
     inline std::vector<image> &get_images() 
     {
       return _images;
     }
 
+    /** Get the image name collection. */
     inline const std::vector<std::string> &get_names() const
     {
       return _names;
     }
 
+    /** Get the image name collection. */
     inline std::vector<std::string> &get_names() 
     {
       return _names;
     }
 
+    /** Get the image group identifier. */
     inline const std::string &get_id() const 
     {
       return _id;
     }
 
+    /** Get the image group identifier. */
     inline std::string &get_id() 
     {
       return _id;
     }
 
+    /** Set the image group identifier. */
     inline void set_id(const std::string &id) 
     {
       _id = id;
@@ -277,8 +302,8 @@ namespace imagebabble {
       all_ok &= io::send(s, v.get_height(), ZMQ_SNDMORE);
       all_ok &= io::send(s, v.get_bytes_per_pixel(), ZMQ_SNDMORE);
       
-      // Need to copy in order to increment reference count, 
-      // otherwise input buffer is nullified.
+      // Need to copy in order to increment reference count, otherwise the 
+      // input buffer is nullified.
       
       zmq::message_t m;
       m.copy(const_cast<zmq::message_t*>(&v._msg));
