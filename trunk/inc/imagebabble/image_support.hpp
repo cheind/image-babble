@@ -48,10 +48,6 @@ namespace imagebabble {
   /** Represents a generic image. */
   class image {
   public:
-    /** Indicator to tell ImageBabble to reuse existing memory */
-    struct share_mem {};
-    /** Indicator to tell ImageBabble to copy from existing memory */
-    struct copy_mem {};
 
     /** Construct a new image. */
     inline image()

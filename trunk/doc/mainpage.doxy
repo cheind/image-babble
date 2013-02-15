@@ -119,6 +119,10 @@
     Luckily, ImageBabble provides imagebabble::image_group for exactly this use-case. It allows you to pack
     multiple (named) images together and send/receive the group at once.
 
+    \par Example Code
+    \link imagegroup_server.cpp \endlink
+    \link imagegroup_client.cpp \endlink
+
     \subsection CustomDataTypes Transmitting Custom Data Types
     Despite the fact ImageBabble was designed with image exchange in mind, it is not limited to image related
     use-cases. To the contrary you can transmit custom data types as long as you provide the necessary 

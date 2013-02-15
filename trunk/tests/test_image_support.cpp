@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(image)
 
   {
     int x = 10;
-    ib::image i(1,1,4,&x, ib::image::share_mem());
+    ib::image i(1,1,4,&x, ib::share_mem());
 
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(image)
 
   {
     int x = 10;
-    ib::image i(1,1,4,&x, ib::image::copy_mem());
+    ib::image i(1,1,4,&x, ib::copy_mem());
 
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(image)
    {
 
       int x = 10;
-      ib::image i0(1,1,4,&x, ib::image::share_mem());
+      ib::image i0(1,1,4,&x, ib::share_mem());
       ib::image i1(std::move(i0));
 
       BOOST_REQUIRE_EQUAL(1, i1.get_width());
@@ -274,7 +274,7 @@ BOOST_AUTO_TEST_CASE(receive_into_existing_memory)
     int arr[5];
 
     ib::image_group g;
-    g.add_image(ib::image(1, 5, sizeof(int), arr, ib::image::share_mem()));
+    g.add_image(ib::image(1, 5, sizeof(int), arr, ib::share_mem()));
 
     BOOST_REQUIRE(c.receive(g));
     BOOST_REQUIRE_EQUAL(1, g.get_images().size());
