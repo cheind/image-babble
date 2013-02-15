@@ -1,4 +1,5 @@
 /*! \file webcam_client.cpp
+    \example webcam_client.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -30,6 +31,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+/** [Example] */
 int main(int argc, char *argv[]) 
 {
   namespace ib = imagebabble;
@@ -53,6 +55,7 @@ int main(int argc, char *argv[])
   }
 
   ic.shutdown();
-
-	return -1;
+  
+  return 0;
 }
+/** [Example] */
