@@ -19,6 +19,14 @@ find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono
 
 find_package(Doxygen)
 
+
+add_library(lib_imagebabble STATIC 
+            inc/imagebabble/core.hpp
+            inc/imagebabble/image_support.hpp
+            inc/imagebabble/imagebabble.hpp)
+set_target_properties(lib_imagebabble PROPERTIES LINKER_LANGUAGE CXX)
+
+
 include_directories(${CMAKE_SOURCE_DIR}/inc)
 include_directories(${ZeroMQ_INCLUDE_DIR})
 
