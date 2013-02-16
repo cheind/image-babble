@@ -37,6 +37,12 @@ namespace ib = imagebabble;
 
 const int any_type = 0;
 
+inline void free_fn_count(void *data, void *hint)
+{
+  int *i = static_cast<int*>(hint);
+  (*i) += 1;
+}
+
 BOOST_AUTO_TEST_CASE(image)
 {
   {
@@ -79,6 +85,21 @@ BOOST_AUTO_TEST_CASE(image)
     BOOST_REQUIRE_EQUAL(sizeof(int), i.size());    
     BOOST_REQUIRE_EQUAL(0, i.get_type());
     BOOST_REQUIRE_NE(&x, i.ptr<int>());    
+  }
+
+  {
+    int x = 10;
+    int count_released = 0;
+    
+    {
+      ib::share_mem s(free_fn_count, &count_released);
+      ib::image i(1, 1, any_type, sizeof(int)*1, &x, s);
+      ib::image i2 = i;
+    }
+
+    BOOST_REQUIRE_EQUAL(1, count_released);
+
+
   }
 
 #ifdef IMAGEBABBLE_HAS_RVALUE_REFS
