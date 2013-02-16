@@ -28,6 +28,7 @@
 */
 
 #include <imagebabble/imagebabble.hpp>
+#include <imagebabble/conversion/opencv.hpp>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
@@ -52,14 +53,8 @@ int main(int argc, char *argv[])
 
     for (size_t i = 0; i < images.size(); ++i) {
 
-      // Convert to OpenCV without copying data
-      cv::Mat img(
-        images[i].get_height(), 
-        images[i].get_width(), 
-        CV_8UC3, 
-        images[i].ptr<void>());
-
-      cv::imshow(names[i], img);      
+      cv::Mat cv_img = ib::cvt_image< cv::Mat >(images[i], ib::share_mem());      
+      cv::imshow(names[i], cv_img);      
     }
 
   }

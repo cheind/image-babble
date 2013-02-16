@@ -32,6 +32,7 @@
 #include "core.hpp"
 #include <string>
 #include <vector>
+#include <exception>
 
 namespace imagebabble {
 
@@ -51,41 +52,41 @@ namespace imagebabble {
 
     /** Construct a new image. */
     inline image()
-      : _w(0), _h(0), _bbp(0), _shared_mem(false)
+      : _w(0), _h(0), _step(0), _type(-1), _shared_mem(false)
     {}
 
     /** Construct a new image. The implementation will copy the header 
       * information and share the buffer by incrementing its reference count. */
     inline explicit image(const image &other) 
-      : _w(other._w), _h(other._h), _bbp(other._bbp), _shared_mem(other._shared_mem)
+      : _w(other._w), _h(other._h), _step(other._step), _type(other._type), _shared_mem(other._shared_mem)
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
     }
 
     /** Construct a new image. Allocates the necessary image data buffer size. */
-    inline explicit image(int w, int h, int bbp) 
-      : _msg(w*h*bbp), _w(w), _h(h), _bbp(bbp), _shared_mem(false)
+    inline explicit image(int w, int h, int type, int step) 
+      : _msg(h*step), _w(w), _h(h), _step(step), _type(type), _shared_mem(false)
     {}
   
     /** Construct a new image. The implementation does not take ownership of the passed 
       * bock. Freeing it is a responsibility of the caller. */
-    inline explicit image(int w, int h, int bbp, void *data, const share_mem &) 
-      : _msg(data, w*h*bbp, null_deleter, 0), _w(w), _h(h), _bbp(bbp), _shared_mem(true)
+    inline explicit image(int w, int h, int type, int step, void *data, const share_mem &) 
+      : _msg(data, h*step, null_deleter, 0), _w(w), _h(h), _step(step), _type(type), _shared_mem(true)
     {}
 
     /** Construct a new image. The implementation will copy the data given. The newly
       * allocated buffer will be released when its reference count hits zero. */
-    inline explicit image(int w, int h, int bbp, void *data, const copy_mem &) 
-      : _msg(w*h*bbp), _w(w), _h(h), _bbp(bbp), _shared_mem(false)
+    inline explicit image(int w, int h, int type, int step, void *data, const copy_mem &) 
+      : _msg(h*step), _w(w), _h(h), _type(type), _step(step), _shared_mem(false)
     {
-      memcpy(_msg.data(), data, w*h*bbp);      
+      memcpy(_msg.data(), data, _msg.size());      
     }
 
 #ifdef IB_HAS_RVALUE_REFS
 
     /** Construct a new image. Renders the source invalid. */
     inline image(image &&rhs)
-      : _msg(std::move(rhs._msg)), _shared_mem(rhs._shared_mem), _w(rhs._w), _h(rhs._h), _bbp(rhs._bbp)
+      : _msg(std::move(rhs._msg)), _shared_mem(rhs._shared_mem), _w(rhs._w), _h(rhs._h), _type(rhs._type), _step(rhs._step)
     {}
 
     /** Move assignment operator. Renders the source invalid. */
@@ -96,7 +97,8 @@ namespace imagebabble {
         _shared_mem = rhs._shared_mem;
         _w = rhs._w;
         _h = rhs._h;
-        _bbp = rhs._bbp;
+        _type = rhs._type;
+        _step = rhs._step;
       }
       return *this;
     }
@@ -111,7 +113,8 @@ namespace imagebabble {
         _shared_mem = rhs._shared_mem;
         _w = rhs._w;
         _h = rhs._h;
-        _bbp = rhs._bbp;
+        _step = rhs._step;
+        _type = rhs._type;
       }
       return *this;
     }
@@ -149,9 +152,15 @@ namespace imagebabble {
     }
 
     /** Get number of bytes per pixel. */
-    inline int get_bytes_per_pixel() const 
+    inline int get_step() const 
     { 
-      return _bbp; 
+      return _step; 
+    }
+
+    /** Get number of bytes per pixel. */
+    inline int get_type() const 
+    { 
+      return _type; 
     }
 
     /** Copy image data buffer to given destination. */
@@ -170,7 +179,7 @@ namespace imagebabble {
     {}
 
     zmq::message_t _msg;
-    int _w, _h, _bbp;
+    int _w, _h, _step, _type;
     bool _shared_mem;
   };
   
@@ -296,7 +305,8 @@ namespace imagebabble {
       
       all_ok &= io::send(s, v.get_width(), ZMQ_SNDMORE);
       all_ok &= io::send(s, v.get_height(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_bytes_per_pixel(), ZMQ_SNDMORE);
+      all_ok &= io::send(s, v.get_type(), ZMQ_SNDMORE);
+      all_ok &= io::send(s, v.get_step(), ZMQ_SNDMORE);
       
       // Need to copy in order to increment reference count, otherwise the 
       // input buffer is nullified.
@@ -317,7 +327,8 @@ namespace imagebabble {
     {
       IB_STOP_RECV_UNLESS(io::recv(s, v._w), s);
       IB_STOP_RECV_UNLESS(io::recv(s, v._h), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._bbp), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._type), s);
+      IB_STOP_RECV_UNLESS(io::recv(s, v._step), s);
 
       if (v._shared_mem) {
         int bytes = zmq_recv(s, v._msg.data(), v._msg.size(), 0);
@@ -352,8 +363,41 @@ namespace imagebabble {
 
       return true;
     }
+  }
 
+  /** Generic image conversion */
+  template<class From, class To, class MemOp>
+  bool cvt_image(const From &src, To &to, const MemOp&) 
+  {
 
+    // If your compiler gets trapped here, it means that no suitable
+    // image conversion function was found by your compiler. Either it does
+    // not exist or is not included.
+    static_assert(false);
+  }
+
+  /** Thrown when image conversion fails. */
+  class image_conversion_failed : public std::exception {
+  public:
+    image_conversion_failed() throw () {}
+
+    virtual const char *what () const throw ()
+    {
+      return "image conversion failed";
+    }
+
+  };
+
+  /** Default image conversion function. */
+  template<class To, class From, class MemOp>
+  To cvt_image(const From &src, const MemOp &m) 
+  {
+    To to;
+
+    if (!cvt_image(src, to, m)) {
+      throw image_conversion_failed();
+    }
+    return to;
   }
 
 }

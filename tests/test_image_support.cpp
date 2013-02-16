@@ -35,43 +35,49 @@ BOOST_AUTO_TEST_SUITE(test_image_support)
 
 namespace ib = imagebabble;
 
+const int any_type = 0;
+
 BOOST_AUTO_TEST_CASE(image)
 {
   {
     ib::image i;
     BOOST_REQUIRE_EQUAL(0, i.get_width());
     BOOST_REQUIRE_EQUAL(0, i.get_height());
-    BOOST_REQUIRE_EQUAL(0, i.get_bytes_per_pixel());
+    BOOST_REQUIRE_EQUAL(0, i.get_step());
+    BOOST_REQUIRE_EQUAL(-1, i.get_type());
     BOOST_REQUIRE_EQUAL(0, i.size());    
   }
 
   {
-    ib::image i(640,480,3);
+    ib::image i(640, 480, any_type, 640*3);
     BOOST_REQUIRE_EQUAL(640, i.get_width());
     BOOST_REQUIRE_EQUAL(480, i.get_height());
-    BOOST_REQUIRE_EQUAL(3, i.get_bytes_per_pixel());
+    BOOST_REQUIRE_EQUAL(640*3, i.get_step());
+    BOOST_REQUIRE_EQUAL(0, i.get_type());
     BOOST_REQUIRE_EQUAL(640*480*3, i.size());    
   }
 
   {
     int x = 10;
-    ib::image i(1,1,4,&x, ib::share_mem());
+    ib::image i(1, 1, any_type, sizeof(int)*1, &x, ib::share_mem());
 
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
-    BOOST_REQUIRE_EQUAL(4, i.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i.size());    
+    BOOST_REQUIRE_EQUAL(sizeof(int), i.get_step());
+    BOOST_REQUIRE_EQUAL(sizeof(int), i.size());    
+    BOOST_REQUIRE_EQUAL(0, i.get_type());
     BOOST_REQUIRE_EQUAL(&x, i.ptr<int>());    
   }
 
   {
     int x = 10;
-    ib::image i(1,1,4,&x, ib::copy_mem());
-
+    ib::image i(1, 1, any_type, sizeof(int)*1,&x, ib::copy_mem());
+    
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
-    BOOST_REQUIRE_EQUAL(4, i.get_bytes_per_pixel());
-    BOOST_REQUIRE_EQUAL(4, i.size());    
+    BOOST_REQUIRE_EQUAL(sizeof(int), i.get_step());
+    BOOST_REQUIRE_EQUAL(sizeof(int), i.size());    
+    BOOST_REQUIRE_EQUAL(0, i.get_type());
     BOOST_REQUIRE_NE(&x, i.ptr<int>());    
   }
 
@@ -79,29 +85,32 @@ BOOST_AUTO_TEST_CASE(image)
    {
 
       int x = 10;
-      ib::image i0(1,1,4,&x, ib::share_mem());
+      ib::image i0(1, 1, any_type, sizeof(int),&x, ib::share_mem());
       ib::image i1(std::move(i0));
 
       BOOST_REQUIRE_EQUAL(1, i1.get_width());
       BOOST_REQUIRE_EQUAL(1, i1.get_height());
-      BOOST_REQUIRE_EQUAL(4, i1.get_bytes_per_pixel());
-      BOOST_REQUIRE_EQUAL(4, i1.size());    
+      BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_step());
+      BOOST_REQUIRE_EQUAL(any_type, i1.get_type());
+      BOOST_REQUIRE_EQUAL(sizeof(int), i1.size());    
       BOOST_REQUIRE_EQUAL(&x, i1.ptr<int>());    
 
       ib::image i2 = std::move(i1);
 
       BOOST_REQUIRE_EQUAL(1, i2.get_width());
       BOOST_REQUIRE_EQUAL(1, i2.get_height());
-      BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
-      BOOST_REQUIRE_EQUAL(4, i2.size());    
+      BOOST_REQUIRE_EQUAL(sizeof(int), i2.get_step());
+      BOOST_REQUIRE_EQUAL(any_type, i2.get_type());
+      BOOST_REQUIRE_EQUAL(sizeof(int), i2.size());    
       BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());   
 
       i2 = std::move(i2);
     
       BOOST_REQUIRE_EQUAL(1, i2.get_width());
       BOOST_REQUIRE_EQUAL(1, i2.get_height());
-      BOOST_REQUIRE_EQUAL(4, i2.get_bytes_per_pixel());
-      BOOST_REQUIRE_EQUAL(4, i2.size());    
+      BOOST_REQUIRE_EQUAL(sizeof(int), i2.get_step());
+      BOOST_REQUIRE_EQUAL(any_type, i2.get_type());
+      BOOST_REQUIRE_EQUAL(sizeof(int), i2.size());    
       BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());
 
       /* I believe zeromq does this is by design. It copies the data if the message size is 
@@ -114,22 +123,22 @@ BOOST_AUTO_TEST_CASE(image)
 
       // should ref-count
 
-      i0 = ib::image(1, elems, sizeof(int));
+      i0 = ib::image(1, elems, any_type, sizeof(int));
       int *adr = i0.ptr<int>();
       i1 = std::move(i0);
 
       BOOST_REQUIRE_EQUAL(1, i1.get_width());
       BOOST_REQUIRE_EQUAL(elems, i1.get_height());
-      BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_bytes_per_pixel());
+      BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_step());
+      BOOST_REQUIRE_EQUAL(any_type, i1.get_type());
       BOOST_REQUIRE_EQUAL(elems * sizeof(int), i1.size());    
       BOOST_REQUIRE_EQUAL(adr, i1.ptr<int>());
 
       // should not ref count
 
-      i0 = ib::image(1, elems - 1, sizeof(int));
+      i0 = ib::image(1, elems - 1, any_type, sizeof(int));
       adr = i0.ptr<int>();
       i1 = std::move(i0);
-  
       BOOST_REQUIRE_NE(adr, i1.ptr<int>());
 
     }
@@ -143,7 +152,7 @@ BOOST_AUTO_TEST_CASE(send_receive_image)
 
   sr.set_send([](ib::reliable_server &s){
     
-    ib::image img(1, 5, sizeof(int));
+    ib::image img(1, 5, any_type, sizeof(int));
     for (int i = 0; i < img.get_height(); ++i) {
       img.ptr<int>()[i] = i;
     } 
@@ -157,7 +166,8 @@ BOOST_AUTO_TEST_CASE(send_receive_image)
     BOOST_REQUIRE(c.receive(img));
     BOOST_REQUIRE_EQUAL(1, img.get_width());
     BOOST_REQUIRE_EQUAL(5, img.get_height());
-    BOOST_REQUIRE_EQUAL(sizeof(int), img.get_bytes_per_pixel());
+    BOOST_REQUIRE_EQUAL(sizeof(int), img.get_step());
+    BOOST_REQUIRE_EQUAL(any_type, img.get_type());
     BOOST_REQUIRE_EQUAL(0, img.ptr<int>()[0]);
     BOOST_REQUIRE_EQUAL(1, img.ptr<int>()[1]);
     BOOST_REQUIRE_EQUAL(2, img.ptr<int>()[2]);
@@ -177,9 +187,9 @@ BOOST_AUTO_TEST_CASE(send_receive_image_group)
     
     ib::image_group g;
     g.set_id("my frame");
-    g.add_image(ib::image(1, 5, sizeof(int)), "image one");
-    g.add_image(ib::image(1, 5, sizeof(int)), "image two");
-    g.add_image(ib::image(1, 5, sizeof(int)), "image three");
+    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
+    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image two");
+    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image three");
 
     for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     for (int i = 0; i < g.get_images()[1].get_height(); ++i) { g.get_images()[1].ptr<int>()[i] = i; }
@@ -223,7 +233,7 @@ BOOST_AUTO_TEST_CASE(send_receive_image_group_many_times)
     
     ib::image_group g;
     g.set_id("content");
-    g.add_image(ib::image(1, 5, sizeof(int)), "image one");    
+    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");    
     for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     
     BOOST_REQUIRE(s.publish(g));
@@ -262,7 +272,7 @@ BOOST_AUTO_TEST_CASE(receive_into_existing_memory)
   sr.set_send([](ib::reliable_server &s){
     
     ib::image_group g;
-    g.add_image(ib::image(1, 5, sizeof(int)), "image one");
+    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
     
     for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     
@@ -274,7 +284,7 @@ BOOST_AUTO_TEST_CASE(receive_into_existing_memory)
     int arr[5];
 
     ib::image_group g;
-    g.add_image(ib::image(1, 5, sizeof(int), arr, ib::share_mem()));
+    g.add_image(ib::image(1, 5, any_type, sizeof(int), arr, ib::share_mem()));
 
     BOOST_REQUIRE(c.receive(g));
     BOOST_REQUIRE_EQUAL(1, g.get_images().size());

@@ -29,6 +29,7 @@
 
 /** [Include Statement] */
 #include <imagebabble/imagebabble.hpp>
+#include <imagebabble/conversion/opencv.hpp>
 /** [Include Statement] */
 
 #include <opencv2/opencv.hpp>
@@ -45,11 +46,11 @@ int main(int argc, char *argv[])
   }
 
   // Load a bunch of images
-  cv::Mat i[2];
-  i[0] = cv::imread("image_0.png");
-  i[1] = cv::imread("image_1.png");
+  cv::Mat cv_img[2];
+  cv_img[0] = cv::imread("image_0.png");
+  cv_img[1] = cv::imread("image_1.png");
 
-  if (i[0].empty() || i[1].empty()) {
+  if (cv_img[0].empty() || cv_img[1].empty()) {
     std::cerr << "Could not find images" << std::endl;
     return -1;
   }
@@ -60,9 +61,9 @@ int main(int argc, char *argv[])
 
   // Form group
   ib::image_group g;
-  g.add_image(ib::image(i[0].cols, i[0].rows, i[0].elemSize(), i[0].ptr(), ib::share_mem()), "first");
-  g.add_image(ib::image(i[1].cols, i[1].rows, i[1].elemSize(), i[1].ptr(), ib::share_mem()), "second");
-
+  g.add_image(ib::cvt_image< ib::image >(cv_img[0], ib::share_mem()), "first");
+  g.add_image(ib::cvt_image< ib::image >(cv_img[1], ib::share_mem()), "second");
+  
   // Publish
   is.publish(g);
 

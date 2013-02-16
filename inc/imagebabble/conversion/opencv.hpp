@@ -1,5 +1,4 @@
-/*! \file webcam_client.cpp
-    \example webcam_client.cpp
+/*! \file opencv.hpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -27,37 +26,51 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-#include <imagebabble/imagebabble.hpp>
-#include <imagebabble/conversion/opencv.hpp>
-#include <opencv2/opencv.hpp>
-#include <iostream>
+#ifndef __IMAGE_BABBLE_CVT_OPENCV_HPP_INCLUDED__
+#define __IMAGE_BABBLE_CVT_OPENCV_HPP_INCLUDED__
 
-/** [Example] */
-int main(int argc, char *argv[]) 
-{
-  namespace ib = imagebabble;
+#include "../core.hpp"
+#include "../image_support.hpp"
 
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " address" << std::endl;
-    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
-    return -1;
+#include <opencv2/core/core.hpp>
+
+namespace imagebabble {
+
+  /** Convert from OpenCV matrix to image. */
+  template<class MemOp>
+  inline bool cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
+  {
+    to = image(src.cols, src.rows, src.type(), src.step, src.data, m);
+    return true;
   }
 
-  ib::fast_client ic;
-  ic.startup(argv[1]);
-  
-  ib::image ib_image;
-  while (ic.receive(ib_image, 5000)) {
+  /** Convert from image to OpenCV matrix. */
+  inline bool cvt_image(const image &src, cv::Mat &to, const copy_mem &m) 
+  {
+    to.create(src.get_height(), src.get_width(), src.get_type());
+    
+    if (to.elemSize1() != src.size()) {
+      return false;
+    }
 
-    cv::Mat cv_img;
-    ib::cvt_image(ib_image, cv_img, ib::copy_mem());
-
-    cv::imshow("image", cv_img);
-    cv::waitKey(1);
+    memcpy(to.data, src.ptr<void>(), src.size());    
+    return true;
   }
 
-  ic.shutdown();
+  /** Convert from image to OpenCV matrix. */
+  inline bool cvt_image(const image &src, cv::Mat &to, const share_mem &m) 
+  {
+    to = cv::Mat(
+      src.get_height(), src.get_width(), src.get_type(), 
+      const_cast<void*>(src.ptr<void>()), src.get_step()
+    );
+
+    return true;
+  }
   
-  return 0;
 }
-/** [Example] */
+
+
+
+
+#endif
