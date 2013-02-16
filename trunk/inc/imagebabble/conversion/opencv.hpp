@@ -38,34 +38,30 @@ namespace imagebabble {
 
   /** Convert from OpenCV matrix to image. */
   template<class MemOp>
-  inline bool cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
+  inline void cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
   {
     to = image(src.cols, src.rows, src.type(), src.step, src.data, m);
-    return true;
   }
 
   /** Convert from image to OpenCV matrix. */
-  inline bool cvt_image(const image &src, cv::Mat &to, const copy_mem &m) 
+  inline void cvt_image(const image &src, cv::Mat &to, const copy_mem &m) 
   {
     to.create(src.get_height(), src.get_width(), src.get_type());
     
     if (to.elemSize1() != src.size()) {
-      return false;
+      throw image_conversion_failed();
     }
 
     memcpy(to.data, src.ptr<void>(), src.size());    
-    return true;
   }
 
   /** Convert from image to OpenCV matrix. */
-  inline bool cvt_image(const image &src, cv::Mat &to, const share_mem &m) 
+  inline void cvt_image(const image &src, cv::Mat &to, const share_mem &m) 
   {
     to = cv::Mat(
       src.get_height(), src.get_width(), src.get_type(), 
       const_cast<void*>(src.ptr<void>()), src.get_step()
     );
-
-    return true;
   }
   
 }

@@ -59,8 +59,45 @@ namespace imagebabble {
   typedef std::shared_ptr<zmq::socket_t> socket_ptr;
   /** Reference counted pointer to a ZMQ context. */
   typedef std::shared_ptr<zmq::context_t> context_ptr;
+  
   /** Indicator to intruct reuse of existing memory */
-  struct share_mem {};
+  class share_mem {
+  public:
+
+    /** Construct with default free behaviour. The default free
+      * behaviour is to perform no deletion. */
+    inline share_mem()
+      : _f(null_deleter), _h(0)
+    {}
+
+    /** Construct with custom free function. Allows the caller
+      * to pass a custom function that is being invoked when ZMQ
+      * library is done with processing it. */
+    inline share_mem(zmq::free_fn *f, void *hint)
+      : _f(f), _h(hint)
+    {}
+    
+    /** Get free functions. */
+    inline zmq::free_fn *get_free_fn() const
+    {
+      return _f;
+    }
+
+    /** Get hint. */
+    inline void *get_hint() const {
+      return _h;
+    }
+
+  private:
+
+    /** Null deleter in case no custom free function is supplied. */
+    static inline void null_deleter (void *data, void *hint)
+    {}
+
+    zmq::free_fn *_f;
+    void *_h;
+  };
+
   /** Indicator to instruct copy from existing memory */
   struct copy_mem {};
 
