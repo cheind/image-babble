@@ -40,11 +40,13 @@ if (OpenCV_FOUND)
   add_executable(example_webcamclient examples/webcam_client.cpp)  
   add_executable(example_imagegroupserver examples/imagegroup_server.cpp)
   add_executable(example_imagegroupclient examples/imagegroup_client.cpp)  
+  add_executable(example_customdata examples/customdata_server_client.cpp)  
 
   target_link_libraries(example_webcamserver ${EXAMPLE_LIBS})
   target_link_libraries(example_webcamclient ${EXAMPLE_LIBS})
   target_link_libraries(example_imagegroupserver ${EXAMPLE_LIBS})
   target_link_libraries(example_imagegroupclient ${EXAMPLE_LIBS})
+  target_link_libraries(example_customdata ${EXAMPLE_LIBS})
 endif()
 
 # Tests

@@ -102,11 +102,29 @@
 
     \see imagebabble::reliable_server
     \see imagebabble::reliable_client
-    
-    \subsection NetworkProtocols Network Protocol
-    The ImageBabble library is based on ZeroMQ. ZeroMQ is not a neutral carrier, but
-    implements its functionality based on protocol named ZMTP that sits on top
-    of network protocols such as TCP.
+
+    \section NetworkProtocol Network Protocol
+    The ImageBabble library is based on ZeroMQ. ZeroMQ is not a neutral carrier, but implements its functionality based 
+    on protocol named ZMTP that sits on top of network protocols such as TCP.
+
+    In order to transmit data via network interface boundaries, data needs to be serialized
+    on one side and deserialized on the other endpoint. Such a serialization must pay attention to
+     - the size of data types: the space occupied by an integer is not necessarily 32 bit.
+     - the data endianness: i.e. the ordering of byte components.
+     - the data packing: alignment boundaries for structure elements may differ leading to different data sizes.
+
+    ImageBabble, by default, performs serialization by conversion to text. This will take more bytes on the network,
+    but tackles the above mentioned problems.
+
+    \note Certain data types like float and double have non-unique textual representations, because number of output 
+          characters depends on the number of significant digits. In case bit-wise equality is needed, you should 
+          provide your own serialization for such types. See \ref CustomDataTypes for details.
+
+    The note above doesn't impose a problem for images, as the header to be serialized consists of (positive) integer values 
+    only, which do have a unique textual representation. The image body, i.e. the data, is sent as a large binary block as
+    provided by the user. No endianness conversion or interpretation is done on the image data block, which means that th
+    caller is responsible for correct endianness. Most systems nowadays use little-endian, so you probably won't recognize
+    any problems.
 
     \section AdvancedTopics Advanced Topics
     Here are a couple of advanced topics not covered in other sections.
@@ -125,8 +143,32 @@
 
     \subsection CustomDataTypes Transmitting Custom Data Types
     Despite the fact ImageBabble was designed with image exchange in mind, it is not limited to image related
-    use-cases. To the contrary you can transmit custom data types as long as you provide the necessary 
-    serialization methods.
+    use-cases. To the contrary you can transmit custom data types as long as you provide the necessary serialization methods.
+
+    The following example shows how to transmit a custom data structure that contains personal information:
+
+    \snippet customdata_server_client.cpp Data
+
+    First, you need to provide send (for the server part) and receive (for the client part) methods inside the imagebabble::io namespace.
+
+    \snippet customdata_server_client.cpp Serialization
+    
+    The \c send function passes the flag \c ZMQ_SNDMORE to other send functions to indicate that the message isn't complete yet and more data 
+    is to come. The last send call forwards the input \c flags argument. Doing so, allows later methods to compose even more complex 
+    structs based on \c person and reuse our functions. Also note that the \c friends field reuses a generic vector send implementation. 
+
+    The \c recv function is the counterpart of \c send. It deserializes the data in the same order as it was serialized. The usage of
+    \c IB_STOP_RECV_UNLESS is necessary to drop the remainder of the message automatically when a receive error occurs.
+
+    Finally, we provide the straight forward server 
+
+    \snippet customdata_server_client.cpp Server
+
+    and client functionality
+
+    \snippet customdata_server_client.cpp Client
+
+    The complete example can be found in \link customdata_server_client.cpp \endlink.
 
     \subsection ConnectingMultipleEndpoints Connecting to Multiple Endpoints
     Clients in the ImageBabble library have the possibility to receive data from multiple servers. In order to
