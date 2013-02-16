@@ -46,9 +46,42 @@ namespace imagebabble {
     bool recv(zmq::socket_t &, image_group &);
   };
   
-  /** Represents a generic image. */
+  /** Represents a generic image. An image consists of basic header information
+    * and a data buffer. The header describes the image format using common fields
+    * such as 
+    *  - \a width number of columns in image 
+    *  - \a height number of rows in image
+    *  - \a step the number of bytes between two subsequent rows.
+    *  - \a type opaque type information. 
+    *
+    * \note the \a type field is application dependent. If the sender uses a specific
+    *       type value, the client should know its meaning and act accordingly. For example when 
+    *       sending/receiving OpenCV images the type could be CV_8UC3 (3 channels, 1 byte per channel).
+    *
+    * \note the \a step field has to be calculated by the user of the library as the number of 
+    *       bytes between two rows. For example, assuming a 640x480 image with 3 channels and 1 byte
+    *       per channel, step would be calculated as <code>step = 640*3*1</code>. The step field can
+    *       also be used to describe non-continous images in memory.
+    * 
+    * The data buffer is a block of memory. By default the memory is allocated when the image header
+    * information is provided. Memory allocated by the library is auto-freed using reference counting,
+    * when the last image pointing to the same memory goes out of scope and ZMQ is done with pending
+    * send operations. 
+    *
+    * Alternatively, the user can instruct the library to use pre-existing memory by using specialized
+    * constructors. Such user passed memory is not freed by library and it maintains the responsibility
+    * of the caller to free it. A custom free function can be stored inside a shared_mem to tell the library 
+    * to call the given function when the user data buffer is not needed anymore. The default behavior of 
+    * shared_mem is call no callback.
+    *
+    * \note Copying images by value will not cause the memory to be duplicated, but instead the respective
+    *       reference count will be increased.
+    */
   class image {
   public:
+
+    /** Free function prototype when sharing user memory */
+    typedef void free_fn(void *data, void *hint);
 
     /** Construct a new image. */
     inline image()
@@ -69,9 +102,10 @@ namespace imagebabble {
     {}
   
     /** Construct a new image. The implementation does not take ownership of the passed 
-      * bock. Freeing it is a responsibility of the caller. */
-    inline explicit image(int w, int h, int type, int step, void *data, const share_mem &) 
-      : _msg(data, h*step, null_deleter, 0), _w(w), _h(h), _step(step), _type(type), _shared_mem(true)
+      * bock. Freeing it is a responsibility of the caller. The implementation will ensure
+      * that any custom free function of share_mem is being called. */
+    inline explicit image(int w, int h, int type, int step, void *data, const share_mem &s) 
+      : _msg(data, h*step, s.get_free_fn(), s.get_hint()), _w(w), _h(h), _step(step), _type(type), _shared_mem(true)
     {}
 
     /** Construct a new image. The implementation will copy the data given. The newly
@@ -173,10 +207,6 @@ namespace imagebabble {
 
     friend bool io::send(zmq::socket_t &, const image &, int);
     friend bool io::recv(zmq::socket_t &, image &);
-
-    /** Null deleter in case of supplied user memory. */
-    static inline void null_deleter (void *data, void *hint)
-    {}
 
     zmq::message_t _msg;
     int _w, _h, _step, _type;
@@ -365,22 +395,14 @@ namespace imagebabble {
     }
   }
 
-  /** Generic image conversion */
-  template<class From, class To, class MemOp>
-  bool cvt_image(const From &src, To &to, const MemOp&) 
-  {
-
-    // If your compiler gets trapped here, it means that no suitable
-    // image conversion function was found by your compiler. Either it does
-    // not exist or is not included.
-    static_assert(false);
-  }
-
+  
   /** Thrown when image conversion fails. */
   class image_conversion_failed : public std::exception {
   public:
+    /** Construct. */ 
     image_conversion_failed() throw () {}
 
+    /** Get error string */
     virtual const char *what () const throw ()
     {
       return "image conversion failed";
@@ -388,15 +410,27 @@ namespace imagebabble {
 
   };
 
-  /** Default image conversion function. */
+  /** Generic image conversion. Specializations of this method handle
+    * conversion of external image types to and from internal image types.
+    * Such conversion implementations should be implemented in separate files
+    * that are not included by default. */
+  template<class From, class To, class MemOp>
+  void cvt_image(const From &src, To &to, const MemOp&) 
+  {
+
+    /* If your compiler gets trapped here, it means that no suitable
+     * image conversion function was found by your compiler. Either it does
+     * not exist or is not included. */
+    static_assert(false);
+  }
+
+  /** Generic image conversion. Default implementation uses conversion methods
+    * to imitade return by value behaviour of the output. */
   template<class To, class From, class MemOp>
   To cvt_image(const From &src, const MemOp &m) 
   {
     To to;
-
-    if (!cvt_image(src, to, m)) {
-      throw image_conversion_failed();
-    }
+    cvt_image(src, to, m);
     return to;
   }
 
