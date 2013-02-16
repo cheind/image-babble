@@ -90,7 +90,7 @@ namespace imagebabble {
 
     /** Construct a new image. The implementation will copy the header 
       * information and share the buffer by incrementing its reference count. */
-    inline explicit image(const image &other) 
+    inline image(const image &other) 
       : _w(other._w), _h(other._h), _step(other._step), _type(other._type), _shared_mem(other._shared_mem)
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
