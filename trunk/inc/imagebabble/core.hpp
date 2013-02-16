@@ -528,6 +528,9 @@ namespace imagebabble {
       * imagebabble::io::recv method overload , or primitive output stream
       * extraction (operator>>) semantics. 
       *
+      * \warning You should not rely on receiving a single specific data element 
+      *          with the fast_client and fast_server implementation. Expect data to get lost.
+      *
       * \param [in,out] t data to be received
       * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
       * \returns true when successful
@@ -580,9 +583,6 @@ namespace imagebabble {
     /** Receive data. Data to be received must either have a specific
       * imagebabble::io::recv method overload, or primitive output stream
       * extraction (operator>>) semantics. 
-      *
-      * \warning You should not rely on receiving a single specific data element 
-      *          with the fast_client and fast_server implementation. Expect data to get lost.
       *
       * \param [in,out] t data to be received
       * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
