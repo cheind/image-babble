@@ -1,4 +1,4 @@
-/*! \file opencv.hpp
+/*! \file test_image_opencv.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -26,47 +26,38 @@
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 */
 
-#ifndef __IMAGE_BABBLE_CVT_OPENCV_HPP_INCLUDED__
-#define __IMAGE_BABBLE_CVT_OPENCV_HPP_INCLUDED__
+#include <boost/test/unit_test.hpp>
 
-#include "../core.hpp"
-#include "../image_support.hpp"
+#include <imagebabble/imagebabble.hpp>
+#include <imagebabble/conversion/opencv.hpp>
 
-#include <opencv2/core/core.hpp>
+BOOST_AUTO_TEST_SUITE(test_image_opencv)
 
-namespace imagebabble {
+namespace ib = imagebabble;
 
-  /** Convert from OpenCV matrix to image. */
-  template<class MemOp>
-  inline void cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
-  {
-    to = image(src.cols, src.rows, src.type(), src.step, src.data, m);
-  }
+BOOST_AUTO_TEST_CASE(convert)
+{
+  cv::Mat cv_img(cv::Size(640,480), CV_8UC3);
+  ib::image ib_img = ib::cvt_image< ib::image >(cv_img, ib::share_mem());
+  cv::Mat cv_img2 = ib::cvt_image< cv::Mat > (ib_img, ib::share_mem());
 
-  /** Convert from image to OpenCV matrix. */
-  inline void cvt_image(const image &src, cv::Mat &to, const copy_mem &m) 
-  {
-    to.create(src.get_height(), src.get_width(), src.get_type());
-    
-    if ((to.rows * to.step) != src.size()) {
-      throw image_conversion_failed();
-    }
+  BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img2.rows);
+  BOOST_REQUIRE_EQUAL(cv_img.cols, cv_img2.cols);
+  BOOST_REQUIRE_EQUAL(cv_img.step, cv_img2.step);
+  BOOST_REQUIRE_EQUAL(cv_img.type(), cv_img2.type());
+  BOOST_REQUIRE_EQUAL(cv_img.data, cv_img2.data);
+  BOOST_REQUIRE_EQUAL(cv_img.data, ib_img.ptr<void>());
 
-    memcpy(to.data, src.ptr<void>(), src.size());    
-  }
+  ib::image ib_img2 = ib::cvt_image< ib::image >(cv_img, ib::copy_mem());
+  cv::Mat cv_img3 = ib::cvt_image< cv::Mat > (ib_img2, ib::copy_mem());
 
-  /** Convert from image to OpenCV matrix. */
-  inline void cvt_image(const image &src, cv::Mat &to, const share_mem &m) 
-  {
-    to = cv::Mat(
-      src.get_height(), src.get_width(), src.get_type(), 
-      const_cast<void*>(src.ptr<void>()), src.get_step()
-    );
-  }
-  
+  BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img3.rows);
+  BOOST_REQUIRE_EQUAL(cv_img.cols, cv_img3.cols);
+  BOOST_REQUIRE_EQUAL(cv_img.step, cv_img3.step);
+  BOOST_REQUIRE_EQUAL(cv_img.type(), cv_img3.type());
+  BOOST_REQUIRE_NE(cv_img.data, cv_img3.data);
+  BOOST_REQUIRE_NE(cv_img.data, ib_img2.ptr<void>());
+  BOOST_REQUIRE_NE(cv_img3.data, ib_img2.ptr<void>());
 }
 
-
-
-
-#endif
+BOOST_AUTO_TEST_SUITE_END()
