@@ -48,8 +48,8 @@ if (OpenCV_FOUND)
 endif()
 
 # Tests
-if (Boost_FOUND)
-  set(TEST_LIBS ${ZeroMQ_LIBRARY} ${Boost_LIBRARIES})
+if (Boost_FOUND AND OpenCV_FOUND)
+  set(TEST_LIBS ${ZeroMQ_LIBRARY} ${Boost_LIBRARIES} ${OpenCV_LIBS})
   include_directories(${Boost_INCLUDE_DIR})
   add_definitions(-DBOOST_ALL_DYN_LINK)
   
@@ -58,7 +58,8 @@ if (Boost_FOUND)
     tests/main.cpp
     tests/test_reliable.cpp
     tests/test_data_types.cpp
-    tests/test_image_support.cpp)
+    tests/test_image_support.cpp
+    tests/test_image_opencv.cpp)
 
   target_link_libraries(test_imagebabble ${TEST_LIBS})
 
