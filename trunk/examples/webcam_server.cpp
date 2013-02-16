@@ -29,6 +29,7 @@
 
 /** [Include Statement] */
 #include <imagebabble/imagebabble.hpp>
+#include <imagebabble/conversion/opencv.hpp>
 /** [Include Statement] */
 
 #include <opencv2/opencv.hpp>
@@ -41,12 +42,12 @@ int main(int argc, char *argv[])
 
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
-    std::cerr << "Example: " << argv[0] << "tcp://127.0.0.1:6000" << std::endl;
+    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
     return -1;
   }
 
   cv::VideoCapture vc(0);
-  cv::Mat img;
+  cv::Mat cv_img;
 
   if (!vc.isOpened()) {
     std::cerr << "Failed to open video device" << std::endl;
@@ -58,11 +59,12 @@ int main(int argc, char *argv[])
   
   while (vc.grab()) {
 
-    vc.retrieve(img);
+    vc.retrieve(cv_img);
 
-    ib::image i(img.cols, img.rows, img.elemSize(), img.ptr(), ib::copy_mem());
-    
-    is.publish(i);
+    ib::image ib_img;
+    ib::cvt_image(cv_img, ib_img, ib::copy_mem());
+
+    is.publish(ib_img);
   }
 
   is.shutdown();

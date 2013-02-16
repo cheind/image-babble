@@ -23,6 +23,7 @@ find_package(Doxygen)
 add_library(lib_imagebabble STATIC 
             inc/imagebabble/core.hpp
             inc/imagebabble/image_support.hpp
+            inc/imagebabble/conversion/opencv.hpp
             inc/imagebabble/imagebabble.hpp)
 set_target_properties(lib_imagebabble PROPERTIES LINKER_LANGUAGE CXX)
 
