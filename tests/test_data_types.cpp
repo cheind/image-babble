@@ -89,9 +89,9 @@ BOOST_AUTO_TEST_CASE(data_types)
     BOOST_REQUIRE(c.receive(v5)); BOOST_REQUIRE(v5.size() == 3 && v5[0] == 0 && v5[1] == 1 && v5[2] == 2);
 
     // Server sends empty, trying to read as int or more complex elements
-    BOOST_REQUIRE(!c.receive(v0));
-    BOOST_REQUIRE(!c.receive(v5));
-    BOOST_REQUIRE(!c.receive(v0));
+    BOOST_REQUIRE_THROW(c.receive(v0), ib::ib_error);
+    BOOST_REQUIRE_THROW(c.receive(v5), ib::ib_error);
+    BOOST_REQUIRE_THROW(c.receive(v0), ib::ib_error);
 
     // Something meaningful again
     BOOST_REQUIRE(c.receive(v3)); BOOST_REQUIRE_EQUAL(std::string("hello world"), v3);

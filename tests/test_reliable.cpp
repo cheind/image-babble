@@ -220,8 +220,6 @@ BOOST_AUTO_TEST_CASE(missing_client)
 
     if (s.publish(1, -1, nclients)) sum_sent += 1;
     if (s.publish(2, 2000, nclients)) sum_sent += 2;
-    BOOST_REQUIRE(s.has_error());
-    BOOST_REQUIRE_EQUAL(s.get_last_error().get_reason(), ib::ib_error::ETIMEOUT); 
 
     s.shutdown();
 
@@ -237,9 +235,6 @@ BOOST_AUTO_TEST_CASE(missing_client)
     if (c.receive(j, -1)) sum_received[0] += j;
     if (c.receive(j, 2000)) sum_received[0] += j;
     c.shutdown();    
-
-    BOOST_REQUIRE(c.has_error());
-    BOOST_REQUIRE_EQUAL(ib::ib_error::ETIMEOUT, c.get_last_error().get_reason());
   });
 
   g.create_thread([&sum_received]() {
@@ -252,8 +247,6 @@ BOOST_AUTO_TEST_CASE(missing_client)
     // Just receive once and disconnect
     if (c.receive(j, -1)) sum_received[1] += j;
     c.shutdown();    
-
-    BOOST_REQUIRE(!c.has_error());
   });
 
   g.join_all();
@@ -270,11 +263,9 @@ BOOST_AUTO_TEST_CASE(missing_server)
 
     int j;
     ib::reliable_client c;    
-    BOOST_REQUIRE(c.startup());
+    c.startup();
     BOOST_REQUIRE(!c.receive(j, 2000));
-    BOOST_REQUIRE(c.has_error());
-    BOOST_REQUIRE_EQUAL(ib::ib_error::ETIMEOUT, c.get_last_error().get_reason());
-    BOOST_REQUIRE(c.shutdown());    
+    c.shutdown();    
   });
 
   g.join_all();
