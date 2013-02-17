@@ -32,31 +32,27 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+namespace ib = imagebabble;
+
 /** [Example] */
 int main(int argc, char *argv[]) 
 {
-  namespace ib = imagebabble;
-
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " address" << std::endl;
-    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
-    return -1;
-  }
-
+  // Start client
   ib::fast_client ic;
-  ic.startup(argv[1]);
-  
+  ic.startup("tcp://127.0.0.1:6000");
+
+  // Try to receive image with timeout
   ib::image ib_image;
   while (ic.receive(ib_image, 5000)) {
 
+    // Convert image
     cv::Mat cv_img;
     ib::cvt_image(ib_image, cv_img, ib::copy_mem());
 
+    // Show image
     cv::imshow("image", cv_img);
     cv::waitKey(1);
   }
-
-  ic.shutdown();
   
   return 0;
 }

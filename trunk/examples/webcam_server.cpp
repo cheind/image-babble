@@ -35,39 +35,31 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+/** [Namespace Abbrevation] */
+namespace ib = ::imagebabble;
+/** [Namespace Abbrevation] */
+
 /** [Example] */
 int main(int argc, char *argv[]) 
-{
-  namespace ib = imagebabble;
-
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
-    std::cerr << "Example: " << argv[0] << " tcp://127.0.0.1:6000" << std::endl;
-    return -1;
-  }
-
+{  
+  // Start server
+  ib::fast_server is;
+  is.startup("tcp://*:6000");
+   
+  // Open video device
   cv::VideoCapture vc(0);
   cv::Mat cv_img;
-
-  if (!vc.isOpened()) {
-    std::cerr << "Failed to open video device" << std::endl;
-    return -1;
-  }
-
-  ib::fast_server is;
-  is.startup(argv[1]);
-  
-  while (vc.grab()) {
-
-    vc.retrieve(cv_img);
-
+   
+  // While more images are available ...
+  while (vc.grab() && vc.retrieve(cv_img)) 
+  {
+    // Convert image
     ib::image ib_img;
     ib::cvt_image(cv_img, ib_img, ib::copy_mem());
 
+    // Publish to all connected clients
     is.publish(ib_img);
   }
-
-  is.shutdown();
   
   return 0;
 }

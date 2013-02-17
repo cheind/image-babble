@@ -102,11 +102,11 @@ INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@/inc/imagebabble/ \
                          @CMAKE_CURRENT_SOURCE_DIR@/doc/mainpage.doxy
 INPUT_ENCODING         = UTF-8
 FILE_PATTERNS          = *.hpp *.cpp
-RECURSIVE              = NO
+RECURSIVE              = YES
 EXCLUDE                =
 EXCLUDE_SYMLINKS       = NO
 EXCLUDE_PATTERNS       =
-EXCLUDE_SYMBOLS        = zmq::* person
+EXCLUDE_SYMBOLS        = zmq::* cv::* std::* person
 EXAMPLE_PATH           = @CMAKE_CURRENT_SOURCE_DIR@/examples/
 EXAMPLE_PATTERNS       = *.cpp
 EXAMPLE_RECURSIVE      = YES
@@ -119,7 +119,7 @@ USE_MDFILE_AS_MAINPAGE =
 #---------------------------------------------------------------------------
 # configuration options related to source browsing
 #---------------------------------------------------------------------------
-SOURCE_BROWSER         = NO
+SOURCE_BROWSER         = YES
 INLINE_SOURCES         = NO
 STRIP_CODE_COMMENTS    = YES
 REFERENCED_BY_RELATION = NO

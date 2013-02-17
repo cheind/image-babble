@@ -13,19 +13,28 @@
     \section FirstExample Example
 
     The following example demonstrates streaming of webcam data using ImageBabble. \note the example makes use of <a href="http://opencv.willowgarage.com/wiki/OpenCV">OpenCV</a>
-    to access  video devices. The libary itself does not need OpenCV to run.
+    to access video devices and display images. The libary itself does not need OpenCV to run.
     
     First, make sure to include the library headers
 
     \snippet webcam_server.cpp Include Statement
+    
+    We will shorten the namespace ::imagebabble to something shorter
 
-    Next, write the code.
+    \snippet webcam_server.cpp Namespace Abbrevation
+
+    What follows is the entire server part in just a few of lines of code.
 
     \snippet webcam_server.cpp Example
 
-    The client side is equally trivial to implement.
+    This gives you a full fletched image streaming server that can publish its data to any number of connected clients. Finally, we
+    need to care about the client side. The client will receive images and display it to the user.
 
     \snippet webcam_client.cpp Example
+
+    \par Example Code
+    \link webcam_server.cpp \endlink
+    \link webcam_client.cpp \endlink
 
     \section Installation Installation
     This section will guide you to setup your development environment to get started with ImageBabble.

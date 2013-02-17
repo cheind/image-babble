@@ -35,11 +35,11 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+namespace ib = imagebabble;
+
 /** [Example] */
 int main(int argc, char *argv[]) 
 {
-  namespace ib = imagebabble;
-
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <address>" << std::endl;
     return -1;
