@@ -49,7 +49,7 @@ namespace imagebabble {
     to.create(src.get_height(), src.get_width(), src.get_type());
     
     if ((to.rows * to.step) != src.size()) {
-      throw image_conversion_failed();
+      throw ib_error(ib_error::ECONVERSION);
     }
 
     memcpy(to.data, src.ptr<void>(), src.size());    

@@ -157,8 +157,7 @@
     is to come. The last send call forwards the input \c flags argument. Doing so, allows later methods to compose even more complex 
     structs based on \c person and reuse our functions. Also note that the \c friends field reuses a generic vector send implementation. 
 
-    The \c recv function is the counterpart of \c send. It deserializes the data in the same order as it was serialized. The usage of
-    \c IB_STOP_RECV_UNLESS is necessary to drop the remainder of the message automatically when a receive error occurs.
+    The \c recv function is the counterpart of \c send. It deserializes the data in the same order as it was serialized. 
 
     Finally, we provide the straight forward server 
 

@@ -40,10 +40,10 @@ namespace imagebabble {
   class image_group;
 
   namespace io {
-    bool send(zmq::socket_t &, const image &, int);
-    bool recv(zmq::socket_t &, image &);
-    bool send(zmq::socket_t &, const image_group &, int);
-    bool recv(zmq::socket_t &, image_group &);
+    void send(zmq::socket_t &, const image &, int);
+    void recv(zmq::socket_t &, image &);
+    void send(zmq::socket_t &, const image_group &, int);
+    void recv(zmq::socket_t &, image_group &);
   };
   
   /** Represents a generic image. An image consists of basic header information
@@ -205,8 +205,8 @@ namespace imagebabble {
 
   private:
 
-    friend bool io::send(zmq::socket_t &, const image &, int);
-    friend bool io::recv(zmq::socket_t &, image &);
+    friend void io::send(zmq::socket_t &, const image &, int);
+    friend void io::recv(zmq::socket_t &, image &);
 
     zmq::message_t _msg;
     int _w, _h, _step, _type;
@@ -317,8 +317,8 @@ namespace imagebabble {
 
   private:
     
-    friend bool io::send(zmq::socket_t &, const image_group &, int);
-    friend bool io::recv(zmq::socket_t &, image_group &);
+    friend void io::send(zmq::socket_t &, const image_group &, int);
+    friend void io::recv(zmq::socket_t &, image_group &);
 
     std::vector<image> _images;
     std::vector<std::string> _names;
@@ -329,14 +329,12 @@ namespace imagebabble {
   namespace io {
     
     /** Send image. */
-    inline bool send(zmq::socket_t &s, const image &v, int flags = 0) 
-    {
-      bool all_ok = true;
-      
-      all_ok &= io::send(s, v.get_width(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_height(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_type(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_step(), ZMQ_SNDMORE);
+    inline void send(zmq::socket_t &s, const image &v, int flags = 0) 
+    {      
+      io::send(s, v.get_width(), ZMQ_SNDMORE);
+      io::send(s, v.get_height(), ZMQ_SNDMORE);
+      io::send(s, v.get_type(), ZMQ_SNDMORE);
+      io::send(s, v.get_step(), ZMQ_SNDMORE);
       
       // Need to copy in order to increment reference count, otherwise the 
       // input buffer is nullified.
@@ -344,71 +342,45 @@ namespace imagebabble {
       zmq::message_t m;
       m.copy(const_cast<zmq::message_t*>(&v._msg));
 
-      all_ok &= s.send(m, flags);
-
-      return all_ok;
+      IB_ASSERT_ZMQ(s.send(m, flags));
     }
 
     /** Receive image data. If image data points to pre-allocated user memory,
       * the implementation attempts to receive data directly into that buffer.
       * If the buffer is too small to fit the content, the received bytes are
       * truncated to fit and false is returned. */
-    inline bool recv(zmq::socket_t &s, image &v) 
+    inline void recv(zmq::socket_t &s, image &v) 
     {
-      IB_STOP_RECV_UNLESS(io::recv(s, v._w), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._h), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._type), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._step), s);
+      io::recv(s, v._w);
+      io::recv(s, v._h);
+      io::recv(s, v._type);
+      io::recv(s, v._step);
 
       if (v._shared_mem) {
         int bytes = zmq_recv(s, v._msg.data(), v._msg.size(), 0);
         int maxbytes = static_cast<int>(v._msg.size());
-        IB_STOP_RECV_UNLESS(bytes <= maxbytes, s);
+        IB_ASSERT(bytes <= maxbytes, ib_error::EBUFFERTOOSMALL);
       } else {
-        IB_STOP_RECV_UNLESS(s.recv(&v._msg), s);
+        IB_ASSERT_ZMQ(s.recv(&v._msg));
       }
-
-      return true;
     }
 
     /** Send image group. */
-    inline bool send(zmq::socket_t &s, const image_group &v, int flags = 0) 
-    {
-      bool all_ok = true;
-      
-      all_ok &= io::send(s, v.get_id(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_names(), ZMQ_SNDMORE);
-      all_ok &= io::send(s, v.get_images(), flags);
-
-      return all_ok;
+    inline void send(zmq::socket_t &s, const image_group &v, int flags = 0) 
+    {     
+      io::send(s, v.get_id(), ZMQ_SNDMORE);
+      io::send(s, v.get_names(), ZMQ_SNDMORE);
+      io::send(s, v.get_images(), flags);
     }
 
     /** Receive image group. */
-    inline bool recv(zmq::socket_t &s, image_group &v) 
+    inline void recv(zmq::socket_t &s, image_group &v) 
     {
-
-      IB_STOP_RECV_UNLESS(io::recv(s, v._id), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._names), s);
-      IB_STOP_RECV_UNLESS(io::recv(s, v._images), s);
-
-      return true;
+      io::recv(s, v._id);
+      io::recv(s, v._names);
+      io::recv(s, v._images);
     }
   }
-
-  
-  /** Thrown when image conversion fails. */
-  class image_conversion_failed : public std::exception {
-  public:
-    /** Construct. */ 
-    image_conversion_failed() throw () {}
-
-    /** Get error string */
-    virtual const char *what () const throw ()
-    {
-      return "image conversion failed";
-    }
-
-  };
 
   /** Generic image conversion. Specializations of this method handle
     * conversion of external image types to and from internal image types.
