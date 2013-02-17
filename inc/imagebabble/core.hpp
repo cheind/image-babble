@@ -633,12 +633,13 @@ namespace imagebabble {
       *
       * \param [in,out] t data to be received
       * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
+      *             Timeout is set to 1 second by default.
       * \returns true if data was received successfully.
       * \returns false when receive timeout occurred.
       * \throws ib_error on error
       */
     template<class T>
-    inline bool receive(T &t, int timeout_ms = 0)
+    inline bool receive(T &t, int timeout_ms = 1000)
     {
       try {
         if (!io::is_data_pending(*_s, timeout_ms)) {
@@ -701,6 +702,7 @@ namespace imagebabble {
       *
       * \param [in,out] t data to be received
       * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
+      *             Waits forever by default.
       * \returns true if data was received successfully
       * \returns false if receive timeout occurred
       * \throws ib_error on error */

@@ -1,5 +1,49 @@
-
-# Note, OpenCV has no direct FindModule, but requires you to set OpenCV dir to the build subdirectory of the extracted OpenCV.
+#
+# Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of PROFACTOR GmbH nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL PROFACTOR GmbH BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
+#
+#
+# This CMake file generates the necessaary test and example projects to build the
+# ImageBabble library.
+#
+# You need to have the following requirements installed
+#  ZMQ 3.2.x or greater
+#  OpenCV 2.x or greater
+#  Boost 1.50.x or greater
+#
+# Besides you will need a compiler that supports parts of C++11
+#  GCC 4.2 or greater
+#  MSVC 10 or greater
+#
+# 1 Configure
+# 2 Manually point CMake to the ZMQ include directory and the specific library to link
+# 3 Manually point CMake to the OpenCV build directory
+# 4 Configure
+# 5 Generate
+# 6 Build
+#
 
 cmake_minimum_required (VERSION 2.6)
 
@@ -59,6 +103,7 @@ if (Boost_FOUND AND OpenCV_FOUND)
     test_imagebabble 
     tests/main.cpp
     tests/test_reliable.cpp
+    tests/test_fast.cpp
     tests/test_data_types.cpp
     tests/test_image_support.cpp
     tests/test_image_opencv.cpp)
