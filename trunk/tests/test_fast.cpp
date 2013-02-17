@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(single_client)
 
     boost::this_thread::sleep(boost::posix_time::milliseconds(500));
 
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 10; ++i) {
       if (s.publish(1))
         sum_sent += 1;
     }
@@ -113,7 +113,8 @@ BOOST_AUTO_TEST_CASE(single_client)
 
   g.join_all();
 
-  BOOST_REQUIRE(sum_sent == 1000 && sum_received == 1000);  
+  BOOST_REQUIRE_EQUAL(10, sum_sent);
+  BOOST_REQUIRE_EQUAL(10, sum_received);  
 }
 
 BOOST_AUTO_TEST_SUITE_END()
