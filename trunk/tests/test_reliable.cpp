@@ -31,7 +31,7 @@
 #include <imagebabble/imagebabble.hpp>
 #include <boost/thread.hpp>
 
-BOOST_AUTO_TEST_SUITE(test_core)
+BOOST_AUTO_TEST_SUITE(test_reliable)
 
 namespace ib = imagebabble;
 
