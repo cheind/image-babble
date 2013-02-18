@@ -59,33 +59,22 @@ BOOST_AUTO_TEST_CASE(single_client)
   int sum_sent = 0;
   int sum_received = 0;
 
-  bool client_ready = false;
-  boost::condition_variable cv;
-  boost::mutex m;
-
   boost::thread_group g;
-
+  
   // Server part
   g.create_thread([&]() {
 
     ib::fast_server s;
     s.startup();
 
-    {
-      boost::mutex::scoped_lock l(m);
-      while (!client_ready) {
-        cv.wait(l);
-      }
-    }
-
-    boost::this_thread::sleep(boost::posix_time::milliseconds(500));
-
-    for (int i = 0; i < 10; ++i) {
+    zmq::socket_t ctrl(*s.get_context(), ZMQ_SUB);
+    ctrl.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    ctrl.connect("tcp://127.0.0.1:6001");
+    
+    while (!ib::io::is_data_pending(ctrl, 0)) {
       if (s.publish(1))
         sum_sent += 1;
     }
-    
-    s.publish(-1);
 
     s.shutdown();
 
@@ -97,23 +86,25 @@ BOOST_AUTO_TEST_CASE(single_client)
     ib::fast_client c;
     c.startup();
 
-    {
-      boost::mutex::scoped_lock l(m);
-      client_ready = true;
-      cv.notify_one();
-    }
-    
-    int j = -1;
+    zmq::socket_t ctrl(*c.get_context(), ZMQ_PUB);
+    ctrl.bind("tcp://127.0.0.1:6001");
 
-    while (c.receive(j, 1000) && j >= 0) {
-      sum_received += j;
+    int j;
+    while (sum_received < 10) {
+      if (c.receive(j, -1)) {
+        sum_received += 1;
+      }
     }
+
+    ib::io::send(ctrl, ib::io::empty());
+
+    c.shutdown();
 
   });
 
   g.join_all();
 
-  BOOST_REQUIRE_EQUAL(10, sum_sent);
+  BOOST_REQUIRE_LE(10, sum_sent);
   BOOST_REQUIRE_EQUAL(10, sum_received);  
 }
 
