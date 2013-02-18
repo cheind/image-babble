@@ -49,34 +49,42 @@ cmake_minimum_required (VERSION 2.6)
 
 project(ImageBabble)
 
-# Allow ZMQ Finder to work
+# Common settings
+set(IMAGEBABBLE_VERSION_MAJOR "0")
+set(IMAGEBABBLE_VERSION_MINOR "1")
+set(IMAGEBABBLE_VERSION_BUILD "1")
+set(IMAGEBABBLE_VERSION "${IMAGEBABBLE_VERSION_MAJOR}.${IMAGEBABBLE_VERSION_MINOR}.${IMAGEBABBLE_VERSION_BUILD}")
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_NAME "ImageBabble")
+set(CPACK_PACKAGE_VENDOR "PROFACTOR GmbH")
+set(CPACK_PACKAGE_VERSION ${IMAGEBABBLE_VERSION})
+set(CPACK_PACKAGE_VERSION_MAJOR ${IMAGEBABBLE_VERSION_MAJOR})
+set(CPACK_PACKAGE_VERSION_MINOR ${IMAGEBABBLE_VERSION_MINOR})
+set(CPACK_PACKAGE_VERSION_PATCH ${IMAGEBABBLE_VERSION_BUILD})
+set(CPACK_SYSTEM_NAME "x86_x64")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-
-find_package(ZeroMQ REQUIRED)
-
-set(OpenCV_SHARED ON)
-find_package(OpenCV)
-
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS OFF)
-find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono)
+set(OpenCV_SHARED ON)
 
+find_package(ZeroMQ REQUIRED)
+find_package(OpenCV)
+find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono)
 find_package(Doxygen)
 
-
+# Library
 add_library(lib_imagebabble STATIC 
             inc/imagebabble/core.hpp
             inc/imagebabble/image_support.hpp
             inc/imagebabble/conversion/opencv.hpp
             inc/imagebabble/imagebabble.hpp)
-set_target_properties(lib_imagebabble PROPERTIES LINKER_LANGUAGE CXX)
 
+set_target_properties(lib_imagebabble PROPERTIES LINKER_LANGUAGE CXX)
 
 include_directories(${CMAKE_SOURCE_DIR}/inc)
 include_directories(${ZeroMQ_INCLUDE_DIR})
 
 # Examples
-
 if (OpenCV_FOUND)
   set(EXAMPLE_LIBS ${ZeroMQ_LIBRARY} ${OpenCV_LIBS})
   
@@ -109,9 +117,10 @@ if (Boost_FOUND AND OpenCV_FOUND)
     tests/test_image_opencv.cpp)
 
   target_link_libraries(test_imagebabble ${TEST_LIBS})
-
 endif()
 
+
+# Documentation
 if (DOXYGEN_FOUND)
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doc/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
   add_custom_target(BuildDocumentation ALL
@@ -121,7 +130,10 @@ if (DOXYGEN_FOUND)
   )
 endif()
 
+# Installation
+install(DIRECTORY inc/ DESTINATION inc FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY examples/ DESTINATION examples FILES_MATCHING PATTERN "*.cpp")
+install(DIRECTORY ${PROJECT_BINARY_DIR}/Documentation/html/ DESTINATION doc)
 
-
-
-
+# Packaging
+include(CPack)
