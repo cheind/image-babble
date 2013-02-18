@@ -29,7 +29,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <imagebabble/imagebabble.hpp>
-#include "test_utilities.hpp"
+#include <boost/thread/thread.hpp>
 
 BOOST_AUTO_TEST_SUITE(test_image_support)
 
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(image)
 
   }
 
-#ifdef IMAGEBABBLE_HAS_RVALUE_REFS
+#ifdef IB_HAS_RVALUE_REFS
    {
 
       int x = 10;
@@ -166,159 +166,204 @@ BOOST_AUTO_TEST_CASE(image)
 #endif
 }
 
+void server_image_fnc() 
+{
+  ib::reliable_server< ib::image > s;
+  s.startup();
+
+  ib::image img(1, 5, any_type, sizeof(int));
+  for (int i = 0; i < img.get_height(); ++i) {
+    img.ptr<int>()[i] = i;
+  } 
+
+  BOOST_REQUIRE(s.publish(img));
+
+  s.shutdown();
+}
+
+void client_image_fnc()
+{
+  ib::reliable_client< ib::image > c;
+  c.startup();
+
+  ib::image img;
+  BOOST_REQUIRE(c.receive(img));
+  BOOST_REQUIRE_EQUAL(1, img.get_width());
+  BOOST_REQUIRE_EQUAL(5, img.get_height());
+  BOOST_REQUIRE_EQUAL(sizeof(int), img.get_step());
+  BOOST_REQUIRE_EQUAL(any_type, img.get_type());
+  BOOST_REQUIRE_EQUAL(0, img.ptr<int>()[0]);
+  BOOST_REQUIRE_EQUAL(1, img.ptr<int>()[1]);
+  BOOST_REQUIRE_EQUAL(2, img.ptr<int>()[2]);
+  BOOST_REQUIRE_EQUAL(3, img.ptr<int>()[3]);
+  BOOST_REQUIRE_EQUAL(4, img.ptr<int>()[4]);    
+
+  c.shutdown();
+}
 
 BOOST_AUTO_TEST_CASE(send_receive_image)
 {
-  send_receive sr;
+  boost::thread_group g;
 
-  sr.set_send([](ib::reliable_server &s){
-    
-    ib::image img(1, 5, any_type, sizeof(int));
-    for (int i = 0; i < img.get_height(); ++i) {
-      img.ptr<int>()[i] = i;
-    } 
+  g.create_thread(server_image_fnc);
+  g.create_thread(client_image_fnc);
+  g.join_all();
+}
 
-    BOOST_REQUIRE(s.publish(img));
-  });
+void server_image_group_fnc() 
+{
+  ib::reliable_server< ib::image_group > s;
+  s.startup();
 
-  sr.set_recv([](ib::reliable_client &c) {
-    
-    ib::image img;
-    BOOST_REQUIRE(c.receive(img));
-    BOOST_REQUIRE_EQUAL(1, img.get_width());
-    BOOST_REQUIRE_EQUAL(5, img.get_height());
-    BOOST_REQUIRE_EQUAL(sizeof(int), img.get_step());
-    BOOST_REQUIRE_EQUAL(any_type, img.get_type());
-    BOOST_REQUIRE_EQUAL(0, img.ptr<int>()[0]);
-    BOOST_REQUIRE_EQUAL(1, img.ptr<int>()[1]);
-    BOOST_REQUIRE_EQUAL(2, img.ptr<int>()[2]);
-    BOOST_REQUIRE_EQUAL(3, img.ptr<int>()[3]);
-    BOOST_REQUIRE_EQUAL(4, img.ptr<int>()[4]);    
+  ib::image_group g;
+  g.set_id("my frame");
+  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
+  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image two");
+  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image three");
 
-  });
+  for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
+  for (int i = 0; i < g.get_images()[1].get_height(); ++i) { g.get_images()[1].ptr<int>()[i] = i; }
+  for (int i = 0; i < g.get_images()[2].get_height(); ++i) { g.get_images()[2].ptr<int>()[i] = i; }
 
-  BOOST_REQUIRE(sr.run());
+  BOOST_REQUIRE(s.publish(g));
+
+  s.shutdown();
+}
+
+void client_image_group_fnc()
+{
+  ib::reliable_client< ib::image_group > c;
+  c.startup();
+
+  ib::image_group g;
+
+  BOOST_REQUIRE(c.receive(g));
+  BOOST_REQUIRE_EQUAL(std::string("my frame"), g.get_id());
+  BOOST_REQUIRE_EQUAL(3, g.get_images().size());
+  BOOST_REQUIRE_EQUAL(3, g.get_names().size());
+  BOOST_REQUIRE_EQUAL(3, g.size());
+
+  BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
+  BOOST_REQUIRE_EQUAL(std::string("image two"), g.get_names()[1]);
+  BOOST_REQUIRE_EQUAL(std::string("image three"), g.get_names()[2]);
+
+  BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
+  BOOST_REQUIRE_EQUAL(5, g.get_images()[1].get_height());
+  BOOST_REQUIRE_EQUAL(5, g.get_images()[2].get_height());
+
+  for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
+  for (int i = 0; i < g.get_images()[1].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[1].ptr<int>()[i]); }
+  for (int i = 0; i < g.get_images()[2].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[2].ptr<int>()[i]); }
+
+  c.shutdown();
 }
 
 BOOST_AUTO_TEST_CASE(send_receive_image_group)
 {
-  send_receive sr;
+  boost::thread_group g;
 
-  sr.set_send([](ib::reliable_server &s){
-    
-    ib::image_group g;
-    g.set_id("my frame");
-    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
-    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image two");
-    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image three");
-
-    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
-    for (int i = 0; i < g.get_images()[1].get_height(); ++i) { g.get_images()[1].ptr<int>()[i] = i; }
-    for (int i = 0; i < g.get_images()[2].get_height(); ++i) { g.get_images()[2].ptr<int>()[i] = i; }
-
-    BOOST_REQUIRE(s.publish(g));
-  });
-
-  sr.set_recv([](ib::reliable_client &c) {
-    
-    ib::image_group g;
-
-    BOOST_REQUIRE(c.receive(g));
-    BOOST_REQUIRE_EQUAL(std::string("my frame"), g.get_id());
-    BOOST_REQUIRE_EQUAL(3, g.get_images().size());
-    BOOST_REQUIRE_EQUAL(3, g.get_names().size());
-    BOOST_REQUIRE_EQUAL(3, g.size());
-
-    BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
-    BOOST_REQUIRE_EQUAL(std::string("image two"), g.get_names()[1]);
-    BOOST_REQUIRE_EQUAL(std::string("image three"), g.get_names()[2]);
-
-    BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
-    BOOST_REQUIRE_EQUAL(5, g.get_images()[1].get_height());
-    BOOST_REQUIRE_EQUAL(5, g.get_images()[2].get_height());
-
-    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
-    for (int i = 0; i < g.get_images()[1].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[1].ptr<int>()[i]); }
-    for (int i = 0; i < g.get_images()[2].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[2].ptr<int>()[i]); }
-
-  });
-
-  BOOST_REQUIRE(sr.run());
+  g.create_thread(server_image_group_fnc);
+  g.create_thread(client_image_group_fnc);
+  g.join_all();
 }
+
+void server_image_group_many_fnc() 
+{
+  ib::reliable_server< ib::image_group > s;
+  s.startup();
+
+  ib::image_group g;
+  g.set_id("content");
+  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");    
+  for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
+    
+  BOOST_REQUIRE(s.publish(g));
+  BOOST_REQUIRE(s.publish(g));
+  BOOST_REQUIRE(s.publish(g));
+  BOOST_REQUIRE(s.publish(g));
+  BOOST_REQUIRE(s.publish(g));
+  g.set_id("end");
+  BOOST_REQUIRE(s.publish(g));
+
+  s.shutdown();
+}
+
+void client_image_group_many_fnc()
+{
+  ib::reliable_client< ib::image_group > c;
+  c.startup();
+
+  ib::image_group g;
+
+  bool cont = true;
+  do {
+    BOOST_REQUIRE(c.receive(g));
+    cont = (g.get_id() == "content");
+
+    BOOST_REQUIRE_EQUAL(1, g.get_images().size());
+    BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
+    BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
+    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
+
+  } while (cont);
+
+  c.shutdown();
+}
+
 
 BOOST_AUTO_TEST_CASE(send_receive_image_group_many_times)
 {
-  send_receive sr;
+  boost::thread_group g;
 
-  sr.set_send([](ib::reliable_server &s){
+  g.create_thread(server_image_group_many_fnc);
+  g.create_thread(client_image_group_many_fnc);
+  g.join_all();
+}
+
+void server_image_group_preexisting_fnc() 
+{
+  ib::reliable_server< ib::image_group > s;
+  s.startup();
+
+  ib::image_group g;
+  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
     
-    ib::image_group g;
-    g.set_id("content");
-    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");    
-    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
+  for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     
-    BOOST_REQUIRE(s.publish(g));
-    BOOST_REQUIRE(s.publish(g));
-    BOOST_REQUIRE(s.publish(g));
-    BOOST_REQUIRE(s.publish(g));
-    BOOST_REQUIRE(s.publish(g));
-    g.set_id("end");
-    BOOST_REQUIRE(s.publish(g));
-  });
+  BOOST_REQUIRE(s.publish(g));
 
-  sr.set_recv([](ib::reliable_client &c) {
+  s.shutdown();
+}
+
+void client_image_group_preexisting_fnc()
+{
+  ib::reliable_client< ib::image_group > c;
+  c.startup();
+
+  int arr[5];
+
+  ib::image_group g;
+  g.add_image(ib::image(1, 5, any_type, sizeof(int), arr, ib::share_mem()));
+
+  BOOST_REQUIRE(c.receive(g));
+  BOOST_REQUIRE_EQUAL(1, g.get_images().size());
     
-    ib::image_group g;
+  BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
+  BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
+  for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
 
-    bool cont = true;
-    do {
-      BOOST_REQUIRE(c.receive(g));
-      cont = (g.get_id() == "content");
+  BOOST_REQUIRE_EQUAL(arr, g.get_images()[0].ptr<int>());
 
-      BOOST_REQUIRE_EQUAL(1, g.get_images().size());
-      BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
-      BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
-      for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
-
-    } while (cont);
-  });
-
-  BOOST_REQUIRE(sr.run());
+  c.shutdown();
 }
 
 BOOST_AUTO_TEST_CASE(receive_into_existing_memory)
 {
-  send_receive sr;
+  boost::thread_group g;
 
-  sr.set_send([](ib::reliable_server &s){
-    
-    ib::image_group g;
-    g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
-    
-    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
-    
-    BOOST_REQUIRE(s.publish(g));
-  });
-
-  sr.set_recv([](ib::reliable_client &c) {
-    
-    int arr[5];
-
-    ib::image_group g;
-    g.add_image(ib::image(1, 5, any_type, sizeof(int), arr, ib::share_mem()));
-
-    BOOST_REQUIRE(c.receive(g));
-    BOOST_REQUIRE_EQUAL(1, g.get_images().size());
-    
-    BOOST_REQUIRE_EQUAL(std::string("image one"), g.get_names()[0]);
-    BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
-    for (int i = 0; i < g.get_images()[0].get_height(); ++i) { BOOST_REQUIRE_EQUAL(i, g.get_images()[0].ptr<int>()[i]); }
-
-    BOOST_REQUIRE_EQUAL(arr, g.get_images()[0].ptr<int>());
-
-  });
-
-  BOOST_REQUIRE(sr.run());
+  g.create_thread(server_image_group_preexisting_fnc);
+  g.create_thread(client_image_group_preexisting_fnc);
+  g.join_all();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

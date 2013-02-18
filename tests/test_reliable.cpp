@@ -35,46 +35,73 @@ BOOST_AUTO_TEST_SUITE(test_reliable)
 
 namespace ib = imagebabble;
 
+
+void server_fnc(int times, size_t nclients, int timeout, int &count) 
+{
+  ib::reliable_server<int> s;
+  s.startup();
+
+  count = 0;
+  for (int i = 0; i < times; ++i) {
+    if (s.publish(1, timeout, nclients))
+      count += 1;
+  }
+
+  s.publish(-1, 1000, nclients);
+  s.shutdown();
+}
+
+void client_fnc(int timeout, int &count)
+{
+  ib::reliable_client<int> c;
+  c.startup();
+
+  int j = -1;
+
+  count = 0;
+  while (c.receive(j, timeout) && j >= 0) {
+    count += j;
+  }
+
+  c.shutdown();
+}
+
+void client_disconnect_fnc(int &count)
+{
+  ib::reliable_client<int> c;    
+
+  count = 0;
+  int j;
+  c.startup();
+  c.receive(j); count += j;
+  c.shutdown();
+
+  c.startup();
+  c.receive(j); count += j;
+  c.shutdown();
+}
+
+void client_once_fnc(int &count)
+{
+  ib::reliable_client<int> c;    
+
+  count = 0;
+  int j;
+  c.startup();
+  c.receive(j); count += j;
+  c.shutdown();
+}
+
 BOOST_AUTO_TEST_CASE(one_client)
 {
-  int sum_sent = 0;
-  int sum_received = 0;
+  
+  int sum_sent;
+  int sum_received;
 
   boost::thread_group g;
 
-  // Server part
-  g.create_thread([&sum_sent]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    for (int i = 0; i < 1000; ++i) {
-      if (s.publish(i))
-        sum_sent += i;
-    }
-
-    s.publish(-1);
-
-    s.shutdown();
-
-  });
-
-  // Client part
-  g.create_thread([&sum_received]() {
-
-    ib::reliable_client c;
-    c.startup();
-
-    int j = -1;
-
-    while (c.receive(j) && j >= 0) {
-      sum_received += j;
-    }
-
-    c.shutdown();
-
-  });
-
+  g.create_thread(boost::bind(server_fnc, 1000, 1, -1, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_fnc, -1, boost::ref(sum_received)));
   g.join_all();
 
   BOOST_REQUIRE(sum_sent > 0 && sum_sent == sum_received);
@@ -88,41 +115,9 @@ BOOST_AUTO_TEST_CASE(multiple_clients)
   int sum_received[nclients];
 
   boost::thread_group g;
-
-  // Server part
-  g.create_thread([&]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    for (int i = 0; i < 1000; ++i) {
-      if (s.publish(i, -1, nclients))
-        sum_sent += i;
-    }
-
-    s.publish(-1, -1, nclients);
-
-    s.shutdown();
-
-  });
-
-  // Client part
+  g.create_thread(boost::bind(server_fnc, 1000, nclients, -1, boost::ref(sum_sent)));
   for (size_t i = 0; i < nclients; ++i) {
-    g.create_thread([i, &sum_received]() {
-
-      ib::reliable_client c;
-      c.startup();
-
-      int j = -1;
-
-      sum_received[i] = 0;
-      while (c.receive(j) && j >= 0) {
-        sum_received[i] += j;
-      }
-
-      c.shutdown();
-
-    });
+    g.create_thread(boost::bind(client_fnc, -1, boost::ref(sum_received[i])));
   }
 
   g.join_all();
@@ -138,23 +133,7 @@ BOOST_AUTO_TEST_CASE(no_clients)
   int sum_sent = 0;
 
   boost::thread_group g;
-
-  // Server part
-  g.create_thread([&sum_sent]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    ib::stopwatch sw;
-    if (s.publish(1, 2000, 1))
-      sum_sent += 1;
-
-    BOOST_CHECK_GE(sw.elapsed_msecs(), 2000u);
-
-    s.shutdown();
-
-  });
-
+  g.create_thread(boost::bind(server_fnc, 1, 1, 2000, boost::ref(sum_sent)));
   g.join_all();
 
   BOOST_REQUIRE(sum_sent == 0);
@@ -162,45 +141,17 @@ BOOST_AUTO_TEST_CASE(no_clients)
 
 BOOST_AUTO_TEST_CASE(disconnected_client)
 {
-  size_t nclients = 1;
-
-  int sum_sent = 0;
-  int sum_received = 0;
+    
+  int sum_sent;
+  int sum_received;
 
   boost::thread_group g;
 
-  // Server part
-  g.create_thread([&sum_sent]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    if (s.publish(1)) sum_sent += 1;
-    if (s.publish(2)) sum_sent += 2;
-
-    s.shutdown();
-
-  });
-
-  g.create_thread([&sum_received]() {
-
-    int j = -1;
-
-    ib::reliable_client c;    
-
-    c.startup();
-    c.receive(j); sum_received += j;
-    c.shutdown();
-
-    c.startup();
-    c.receive(j); sum_received += j;
-    c.shutdown();
-
-  });
-
+  g.create_thread(boost::bind(server_fnc, 2, 1, -1, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_disconnect_fnc, boost::ref(sum_received)));
   g.join_all();
 
-  BOOST_REQUIRE(sum_sent > 0 && sum_sent == sum_received);  
+  BOOST_REQUIRE(sum_sent > 0 && sum_sent == sum_received);
 }
 
 BOOST_AUTO_TEST_CASE(missing_client)
@@ -211,44 +162,9 @@ BOOST_AUTO_TEST_CASE(missing_client)
   int sum_received[2] = {0, 0};
 
   boost::thread_group g;
-
-  // Server part
-  g.create_thread([&sum_sent, nclients]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    if (s.publish(1, -1, nclients)) sum_sent += 1;
-    if (s.publish(2, 2000, nclients)) sum_sent += 2;
-
-    s.shutdown();
-
-  });
-
-  g.create_thread([&sum_received]() {
-
-    int j = -1;
-
-    ib::reliable_client c;    
-
-    c.startup();
-    if (c.receive(j, -1)) sum_received[0] += j;
-    if (c.receive(j, 2000)) sum_received[0] += j;
-    c.shutdown();    
-  });
-
-  g.create_thread([&sum_received]() {
-
-    int j = -1;
-
-    ib::reliable_client c;    
-
-    c.startup();
-    // Just receive once and disconnect
-    if (c.receive(j, -1)) sum_received[1] += j;
-    c.shutdown();    
-  });
-
+  g.create_thread(boost::bind(server_fnc, 2, 2, 2000, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_fnc, 2000, boost::ref(sum_received[0])));
+  g.create_thread(boost::bind(client_once_fnc, boost::ref(sum_received[1])));
   g.join_all();
 
   BOOST_REQUIRE(sum_sent == 1 && sum_received[0] == 1 && sum_received[1] == 1);  
@@ -256,19 +172,13 @@ BOOST_AUTO_TEST_CASE(missing_client)
 
 BOOST_AUTO_TEST_CASE(missing_server)
 {
+  int sum_received = 0;
   
   boost::thread_group g;
-  
-  g.create_thread([]() {
-
-    int j;
-    ib::reliable_client c;    
-    c.startup();
-    BOOST_REQUIRE(!c.receive(j, 2000));
-    c.shutdown();    
-  });
-
+  g.create_thread(boost::bind(client_fnc, 500, boost::ref(sum_received)));
   g.join_all();
+  
+  BOOST_REQUIRE(0 == sum_received);
 
 }
 

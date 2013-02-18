@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 
   if (std::string(argv[1]) == "server") {
     /** [Server] */
-    ib::reliable_server s;
+    ib::reliable_server< person > s;
     s.startup();
     
     person p;
@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
     /** [Server] */
   } else {
     /** [Client] */
-    ib::reliable_client c;
+    ib::reliable_client< person > c;
     c.startup();
 
     person p;

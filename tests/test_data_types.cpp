@@ -31,75 +31,112 @@
 #include <imagebabble/imagebabble.hpp>
 #include <boost/thread.hpp>
 
-BOOST_AUTO_TEST_SUITE(test_core)
+BOOST_AUTO_TEST_SUITE(test_datatypes)
 
 namespace ib = imagebabble;
 
-BOOST_AUTO_TEST_CASE(data_types)
+
+template<class A>
+void require_equal(const A &lhs, const A &rhs) {
+  BOOST_REQUIRE(lhs == rhs);
+}
+
+void require_equal(const ib::io::empty &lhs, const ib::io::empty &rhs) 
+{}
+
+
+template<class T>
+inline void publish_t(const T &t) {
+  ib::reliable_server<T> s; 
+  s.startup(); 
+  BOOST_REQUIRE(s.publish(t));
+  s.shutdown();
+}
+
+template<class T>
+inline void receive_t(const T &should_be, bool should_parse = true) {
+  ib::reliable_client<T> c; 
+  c.startup(); 
+  T t;
+  if (should_parse) {
+    BOOST_REQUIRE(c.receive(t));
+    require_equal(t, should_be);    
+  } else {
+    BOOST_REQUIRE_THROW(c.receive(t), ib::ib_error);
+  }
+  c.shutdown();
+}
+
+void server_fnc() 
+{
+  publish_t(int(-1));
+  publish_t(float(1.2));
+  publish_t(double(1.3));
+  publish_t(std::string("hello world"));
+  publish_t(ib::io::empty());
+
+  std::vector<int> e;
+  e.push_back(0); e.push_back(1); e.push_back(2);
+  publish_t(e);
+
+  publish_t(ib::io::empty());
+}
+
+void client_fnc()
+{
+  receive_t(int(-1));
+  receive_t(float(1.2));
+  receive_t(double(1.3));
+  receive_t(std::string("hello world"));
+  receive_t(ib::io::empty());
+
+  std::vector<int> e;
+  e.push_back(0); e.push_back(1); e.push_back(2);
+  receive_t(e);
+
+  receive_t((int)(0), false);
+}
+
+void server_incompatible_fnc() 
+{
+  ib::reliable_server< std::string > s; 
+  s.startup(); 
+  s.publish("hello");
+  s.publish("wolrd");
+  s.shutdown();
+
+  ib::reliable_server< int > si; 
+  si.startup();
+  si.publish(1);
+  si.shutdown();
+}
+
+void client_incompatible_fnc() 
+{
+  ib::reliable_client< int > s; 
+  s.startup();
+
+  int i;
+  BOOST_REQUIRE_THROW(s.receive(i), ib::ib_error);
+  BOOST_REQUIRE_THROW(s.receive(i), ib::ib_error);
+  BOOST_REQUIRE(s.receive(i));
+}
+
+
+BOOST_AUTO_TEST_CASE(builtin)
 {
   boost::thread_group g;
-
-  // Server part
-  g.create_thread([]() {
-
-    ib::reliable_server s;
-    s.startup();
-
-    BOOST_REQUIRE(s.publish(int(-1)));
-    BOOST_REQUIRE(s.publish(float(1.2)));
-    BOOST_REQUIRE(s.publish(double(1.3)));
-    BOOST_REQUIRE(s.publish(std::string("hello world")));
-    BOOST_REQUIRE(s.publish(ib::io::empty()));
-
-    std::vector<int> e;
-    e.push_back(0); e.push_back(1); e.push_back(2);
-    BOOST_REQUIRE(s.publish(e));
-
-    // This will create errors on the client side, as they
-    // expect something different.
-    BOOST_REQUIRE(s.publish(ib::io::empty()));
-    BOOST_REQUIRE(s.publish(ib::io::empty()));
-    BOOST_REQUIRE(s.publish(std::string("hello world")));
-
-    // Try to send something meaningful again
-    BOOST_REQUIRE(s.publish(std::string("hello world")));
-
-    s.shutdown();
-
-  });
-
-  // Client part
-  g.create_thread([]() {
-
-    ib::reliable_client c;
-    c.startup();
-
-    int v0;
-    float v1;
-    double v2;
-    std::string v3;
-    ib::io::empty v4;
-    std::vector<int> v5;
-
-    BOOST_REQUIRE(c.receive(v0)); BOOST_REQUIRE_EQUAL(-1, v0);
-    BOOST_REQUIRE(c.receive(v1)); BOOST_REQUIRE_EQUAL(float(1.2), v1);
-    BOOST_REQUIRE(c.receive(v2)); BOOST_REQUIRE_EQUAL(double(1.3), v2);
-    BOOST_REQUIRE(c.receive(v3)); BOOST_REQUIRE_EQUAL(std::string("hello world"), v3);
-    BOOST_REQUIRE(c.receive(v4));
-    BOOST_REQUIRE(c.receive(v5)); BOOST_REQUIRE(v5.size() == 3 && v5[0] == 0 && v5[1] == 1 && v5[2] == 2);
-
-    // Server sends empty, trying to read as int or more complex elements
-    BOOST_REQUIRE_THROW(c.receive(v0), ib::ib_error);
-    BOOST_REQUIRE_THROW(c.receive(v5), ib::ib_error);
-    BOOST_REQUIRE_THROW(c.receive(v0), ib::ib_error);
-
-    // Something meaningful again
-    BOOST_REQUIRE(c.receive(v3)); BOOST_REQUIRE_EQUAL(std::string("hello world"), v3);
-    
-    c.shutdown();
-
-  });
-
+  g.create_thread(server_fnc);
+  g.create_thread(client_fnc);
   g.join_all();
 }
+
+BOOST_AUTO_TEST_CASE(incompatible_types)
+{
+  boost::thread_group g;
+  g.create_thread(server_incompatible_fnc);
+  g.create_thread(client_incompatible_fnc);
+  g.join_all();
+}
+
 BOOST_AUTO_TEST_SUITE_END()

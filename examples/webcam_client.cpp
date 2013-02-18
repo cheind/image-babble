@@ -17,7 +17,7 @@ namespace ib = imagebabble;
 int main(int argc, char *argv[]) 
 {
   // Start client
-  ib::fast_client ic;
+  ib::fast_client< ib::image > ic;
   ic.startup("tcp://127.0.0.1:6000");
 
   // Try to receive image with timeout
