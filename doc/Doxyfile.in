@@ -4,8 +4,8 @@
 # Project related configuration options
 #---------------------------------------------------------------------------
 DOXYFILE_ENCODING      = UTF-8
-PROJECT_NAME           = "Image-Babble"
-PROJECT_NUMBER         =
+PROJECT_NAME           = "ImageBabble"
+PROJECT_NUMBER         = @IMAGEBABBLE_VERSION@
 PROJECT_BRIEF          = "A lightweight C++ library to send and receive images via networks."
 PROJECT_LOGO           = @CMAKE_CURRENT_SOURCE_DIR@/etc/ImageBabble_64.png
 OUTPUT_DIRECTORY       = @PROJECT_BINARY_DIR@/Documentation
