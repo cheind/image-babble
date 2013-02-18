@@ -370,16 +370,6 @@ namespace imagebabble {
       return (items[0].revents & ZMQ_POLLIN);      
     }
 
-    /** Test if data to be read is pending on the network entities. Returns true
-      * when at least one byte readable within the given timeout in milli
-      * seconds. */
-    inline bool is_data_pending(zmq::socket_t &s, int timeout_ms)
-    {
-      zmq::pollitem_t items[] = {{ s, 0, ZMQ_POLLIN, 0 }};      
-      IB_ASSERT_ZMQ(zmq::poll(&items[0], 1, timeout_ms) >= 0);
-      return (items[0].revents & ZMQ_POLLIN);      
-    }
-
     /** Generic send method. T must have insertion operator semantics. 
       *
       * \param[in] s socket to send data to
