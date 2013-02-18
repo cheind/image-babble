@@ -35,24 +35,45 @@ BOOST_AUTO_TEST_SUITE(test_fast)
 
 namespace ib = imagebabble;
 
-BOOST_AUTO_TEST_CASE(no_client)
+void server_fnc(int &count) 
 {
-  // Test non-blocking behaviour
+  ib::fast_server<int> s;
+  s.startup();
 
-  boost::thread_group g;
+  zmq::socket_t ctrl(*s.get_context(), ZMQ_SUB);
+  ctrl.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+  ctrl.connect("tcp://127.0.0.1:6001");
+    
+  count = 0;
+  while (!ib::io::is_data_pending(ctrl, 0)) {
+    if (s.publish(1))
+      count += 1;
+  }
 
-  // Server part
-  g.create_thread([]() {
-
-    ib::fast_server s;
-    s.startup();
-
-    int unused = 0;
-    BOOST_REQUIRE(s.publish(unused));
-  });
-
-  g.join_all();
+  s.shutdown();
 }
+
+void client_fnc(int &count)
+{
+  ib::fast_client<int> c;  
+  c.startup();
+
+  zmq::socket_t ctrl(*c.get_context(), ZMQ_PUB);
+  ctrl.bind("tcp://127.0.0.1:6001");
+
+  int j;
+  count = 0;
+  while (count < 10) {
+    if (c.receive(j, -1)) {
+      count += 1;
+    }
+  }
+
+  ib::io::send(ctrl, ib::io::empty());
+
+  c.shutdown();
+}
+
 
 BOOST_AUTO_TEST_CASE(single_client)
 {
@@ -60,48 +81,9 @@ BOOST_AUTO_TEST_CASE(single_client)
   int sum_received = 0;
 
   boost::thread_group g;
-  
-  // Server part
-  g.create_thread([&]() {
 
-    ib::fast_server s;
-    s.startup();
-
-    zmq::socket_t ctrl(*s.get_context(), ZMQ_SUB);
-    ctrl.setsockopt(ZMQ_SUBSCRIBE, "", 0);
-    ctrl.connect("tcp://127.0.0.1:6001");
-    
-    while (!ib::io::is_data_pending(ctrl, 0)) {
-      if (s.publish(1))
-        sum_sent += 1;
-    }
-
-    s.shutdown();
-
-  });
-
-  // Client part
-  g.create_thread([&]() {
-
-    ib::fast_client c;
-    c.startup();
-
-    zmq::socket_t ctrl(*c.get_context(), ZMQ_PUB);
-    ctrl.bind("tcp://127.0.0.1:6001");
-
-    int j;
-    while (sum_received < 10) {
-      if (c.receive(j, -1)) {
-        sum_received += 1;
-      }
-    }
-
-    ib::io::send(ctrl, ib::io::empty());
-
-    c.shutdown();
-
-  });
-
+  g.create_thread(boost::bind(server_fnc, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_fnc, boost::ref(sum_received)));
   g.join_all();
 
   BOOST_REQUIRE_LE(10, sum_sent);

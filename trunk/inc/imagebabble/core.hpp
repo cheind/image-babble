@@ -129,7 +129,9 @@ namespace imagebabble {
       /** Conversion from or to a specific data type failed. */
       ECONVERSION,
       /** Pre-existing user memory is too small to receive data. */
-      EBUFFERTOOSMALL
+      EBUFFERTOOSMALL,
+      /** Socket is invalid */
+      EINVALIDSOCKET
     };
 
     /** Construct using unkown error. */
@@ -172,6 +174,8 @@ namespace imagebabble {
         return "Type conversion failed";
       case EBUFFERTOOSMALL:
         return "Pre-allocated buffer was too small";
+      case EINVALIDSOCKET:
+        return "Socket isn't yet allocated.";
       default:
         return "Unknown error";
       }
@@ -192,14 +196,33 @@ namespace imagebabble {
       :_ctx(c)
     {}
 
-    /** Get Context */
+    /** Destructor. */
+    virtual ~network_entity()
+    {}
+
+    /** Get context */
     inline context_ptr get_context() const {
       return _ctx;
     }
 
-    /** Destructor. */
-    virtual ~network_entity()
-    {}
+    /** Get socket */
+    inline socket_ptr get_socket() const {
+      return _s;
+    }
+
+    /** Startup a new service or connection to service. Calling this method multiple
+      * times shall result in creating additional services or connections. */
+    virtual void startup(const std::string &addr) = 0;
+
+    /** Shutdown all services or connections*/
+    virtual void shutdown()
+    {
+      if (_s && _s->connected()) {
+        _s->close(); // does not throw.
+        _s.reset();
+      }   
+    }
+    
 
   protected:    
 
@@ -213,7 +236,13 @@ namespace imagebabble {
     network_entity &operator = (const network_entity &);
   };
 
-  /** Base class for servers. */
+  /** Base class for servers. 
+    *
+    * \tparam T Datatype to publish. Data to be published must either have
+    *         a specific send method overload in the imagebabble::io namespace,
+    *         or primitive output stream insertion (operator<<) semantics.
+    */
+  template<typename T>
   class basic_server : public network_entity {
   public:
     
@@ -222,9 +251,28 @@ namespace imagebabble {
       : network_entity(c)
     {}    
 
+    /** Publish data to clients. 
+      * 
+      * \param[in] t data to be published.
+      * \param[in] timeout_ms Maximum time to wait for method to complete successfully.
+      *            Behaviour is implementation dependent.
+      * \param[in] min_serve Minimum number of clients to serve.
+                   Behaviour is dependent on concrete implementation.
+      * \returns true if data was published successfully.
+      * \returns false if timeout occurred.
+      * \throws ib_error on error.
+      **/
+    virtual bool publish(const T &t, int timeout_ms, size_t min_serve) = 0;
+    
   };
 
-  /** Base class for clients. */
+  /** Base class for clients. 
+    *
+    * \tparam Data type to receive. Data to be received must either have a specific
+    * imagebabble::io::recv method overload, or primitive output stream
+    * extraction (operator>>) semantics. 
+    */
+  template<typename T>
   class basic_client : public network_entity {
   public:
     
@@ -233,6 +281,15 @@ namespace imagebabble {
       : network_entity(c)
     {} 
 
+    /** Receive data. 
+      *
+      * \param [in,out] t data to be received
+      * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
+      * \returns true if data was received successfully.
+      * \returns false when receive timeout occurred.
+      * \throws ib_error on error.
+      */
+    virtual bool receive(T &t, int timeout_ms) = 0;
   };
 
   /** Stopwatch implementation. */
@@ -435,12 +492,13 @@ namespace imagebabble {
     * The server will drop messages when no clients are connected. Messages for clients
     * in exceptional states are dropped as well. Expect to lose data when using the 
     * fast server.*/
-  class fast_server : public basic_server {
+  template<typename T>
+  class fast_server : public basic_server<T> {
   public:
 
     /** Default constructor. */
     fast_server()
-      : basic_server(context_ptr(new zmq::context_t(1)))
+      : basic_server<T>(context_ptr(new zmq::context_t(1)))
     {}
 
     /** Destructor. */
@@ -455,7 +513,7 @@ namespace imagebabble {
       * \param[in] addr address to bind server to.
       * \throws ib_error on error.
       */
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
+    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     { 
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
@@ -463,19 +521,8 @@ namespace imagebabble {
 
       IB_CONVERT_ERROR(_s->bind(addr.c_str()));
     }
-    
-    /** Shutdown connections. Closes all previously bound endpoints. */
-    inline void shutdown()
-    {
-      if (_s && _s->connected()) {
-        _s->close(); // does not throw.
-        _s.reset();
-      }   
-    }
 
-    /** Publish data to clients. Data to be published must either have
-      * a specific send method overload in the imagebabble::io namespace,
-      * or primitive output stream insertion (operator<<) semantics.
+    /** Publish data to clients.
       * 
       * \param[in] t data to be published.
       * \param[in] timeout_ms unused. Method returns always immediately.
@@ -483,9 +530,9 @@ namespace imagebabble {
       * \returns true if data was published successfully.
       * \returns false never.
       **/
-    template<class T>
-    bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
+    virtual bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
     {
+      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
       io::send(*_s, t);
       return true;
     }
@@ -500,12 +547,13 @@ namespace imagebabble {
     * the specified timeout interval, the data is sent to all clients. If not, no data 
     * at all is sent.
     */
-  class reliable_server : public basic_server {
+  template<typename T>
+  class reliable_server : public basic_server<T> {
   public:
 
     /** Default constructor. */
     reliable_server()
-      : basic_server(context_ptr(new zmq::context_t(1)))
+      : basic_server<T>(context_ptr(new zmq::context_t(1)))
     {}
 
     /** Destructor. */
@@ -520,7 +568,7 @@ namespace imagebabble {
       * \param[in] addr address to bind to.
       * \throws ib_error on error
       */
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
+    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
@@ -528,19 +576,8 @@ namespace imagebabble {
 
       IB_CONVERT_ERROR(_s->bind(addr.c_str()));
     }
-    
-    /** Shutdown connections. Closes all previously bound endpoints. */
-    inline void shutdown()
-    {
-      if (_s && _s->connected()) {
-        _s->close(); // does not throw
-        _s.reset();
-      }      
-    }
 
-    /** Publish data to clients. Data to be published must either have
-      * a specific send method overload in the imagebabble::io namespace,
-      * or primitive output stream insertion (operator<<) semantics.
+    /** Publish data to clients.
       * 
       * \param [in] t data to be published.
       * \param [in] min_serve minimum number of clients to serve before returning.
@@ -549,9 +586,10 @@ namespace imagebabble {
       * \returns false when a send timeout occurred.
       * \throws ib_error on error.
       **/
-    template<class T>
-    inline bool publish(const T &t, int timeout_ms = -1, size_t min_serve = 1)
+    virtual bool publish(const T &t, int timeout_ms = -1, size_t min_serve = 1)
     {
+      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+
       typedef std::hash_set<std::string> client_set;
 
       client_set clients;
@@ -593,12 +631,13 @@ namespace imagebabble {
   };
 
   /** Fast client implementation. */
-  class fast_client : public basic_client {
+  template<typename T>
+  class fast_client : public basic_client<T> {
   public:
 
     /** Default constructor */
     fast_client()
-      : basic_client(context_ptr(new zmq::context_t(1)))
+      : basic_client<T>(context_ptr(new zmq::context_t(1)))
     {}
 
     /** Start a new connection to the given endpoint. If called multiple times, the client
@@ -607,7 +646,7 @@ namespace imagebabble {
       * \param [in] addr endpoint address to connect to
       * \throws ib_error on error
       */      
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
+    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
@@ -620,18 +659,7 @@ namespace imagebabble {
       IB_CONVERT_ERROR(_s->connect(addr.c_str()));
     }
 
-    /** Shutdown all connections. */
-    inline void shutdown()
-    {
-      if (_s && _s->connected()) {
-        _s->close(); // does not throw
-        _s.reset();
-      }      
-    }
-
-    /** Receive data. Data to be received must either have a specific
-      * imagebabble::io::recv method overload , or primitive output stream
-      * extraction (operator>>) semantics. 
+    /** Receive data.
       *
       * \warning You should not rely on receiving a single specific data element 
       *          with the fast_client and fast_server implementation. Expect data to get lost.
@@ -643,9 +671,10 @@ namespace imagebabble {
       * \returns false when receive timeout occurred.
       * \throws ib_error on error
       */
-    template<class T>
-    inline bool receive(T &t, int timeout_ms = 1000)
+    virtual bool receive(T &t, int timeout_ms = 1000)
     {
+      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+
       try {
         if (!io::is_data_pending(*_s, timeout_ms)) {
           return false;
@@ -665,12 +694,13 @@ namespace imagebabble {
   };
 
   /** Reliable client implementation. */
-  class reliable_client : public basic_client {
+  template<typename T>
+  class reliable_client : public basic_client<T> {
   public:
 
     /** Default constructor */
     reliable_client()
-      : basic_client(context_ptr(new zmq::context_t(1)))
+      : basic_client<T>(context_ptr(new zmq::context_t(1)))
     {}
 
     /** Start a new connection to the given endpoint. If called multiple times, 
@@ -692,18 +722,7 @@ namespace imagebabble {
       IB_CONVERT_ERROR(_s->connect(addr.c_str()));
     }
 
-    /** Shutdown all connections. */
-    inline void shutdown()
-    {
-      if (_s && _s->connected()) {
-        _s->close(); // does not throw
-        _s.reset();
-      }
-    }
-
-    /** Receive data. Data to be received must either have a specific
-      * imagebabble::io::recv method overload, or primitive output stream
-      * extraction (operator>>) semantics. 
+    /** Receive data.
       *
       * \param [in,out] t data to be received
       * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
@@ -711,9 +730,10 @@ namespace imagebabble {
       * \returns true if data was received successfully
       * \returns false if receive timeout occurred
       * \throws ib_error on error */
-    template<class T>
-    bool receive(T &t, int timeout_ms = -1) 
+    virtual bool receive(T &t, int timeout_ms = -1) 
     {
+      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+
       try {
         // Send ready
         io::send(*_s, io::empty());

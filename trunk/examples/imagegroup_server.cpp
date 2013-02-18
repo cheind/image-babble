@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
   }
 
   // Start server
-  ib::reliable_server is;
+  ib::reliable_server< ib::image_group > is;
   is.startup(argv[1]);
 
   // Form group

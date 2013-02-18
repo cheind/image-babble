@@ -22,7 +22,7 @@ namespace ib = ::imagebabble;
 int main(int argc, char *argv[]) 
 {  
   // Start server
-  ib::fast_server is;
+  ib::fast_server< ib::image > is;
   is.startup("tcp://*:6000");
    
   // Open video device

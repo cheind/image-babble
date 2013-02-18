@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  ib::reliable_client ic;
+  ib::reliable_client< ib::image_group > ic;
   ic.startup(argv[1]);
 
   ib::image_group g;
