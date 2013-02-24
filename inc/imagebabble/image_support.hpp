@@ -379,13 +379,17 @@ namespace imagebabble {
     
     /** Send image. */
     inline void send(zmq::socket_t &s, const image &v, int flags = 0) 
-    {      
-      io::send(s, v.get_width(), ZMQ_SNDMORE);
-      io::send(s, v.get_height(), ZMQ_SNDMORE);
-      io::send(s, v.get_step(), ZMQ_SNDMORE);
-      io::send(s, v.get_external_type(), ZMQ_SNDMORE);
-      io::send(s, (int)v.get_format(), ZMQ_SNDMORE);
+    { 
+      std::ostringstream ostr;
+      ostr << v.get_width() << " "
+           << v.get_height() << " "
+           << v.get_step() << " "
+           << v.get_external_type() << " "
+           << v.get_format();
 
+      IB_ASSERT(ostr.good(), ib_error::ECONVERSION);
+      io::send(s, ostr.str(), ZMQ_SNDMORE);
+      
       // Need to copy in order to increment reference count, otherwise the 
       // input buffer is nullified.
       
@@ -401,11 +405,19 @@ namespace imagebabble {
       * truncated to fit and false is returned. */
     inline void recv(zmq::socket_t &s, image &v) 
     {
-      io::recv(s, v._w);
-      io::recv(s, v._h);
-      io::recv(s, v._step);
-      io::recv(s, v._external_type);
-      int f; io::recv(s, f); v._format = static_cast<image::eformat>(f);
+      zmq::message_t msg;
+      IB_ASSERT_ZMQ(s.recv(&msg));
+
+      in_memory_buffer mb(static_cast<char*>(msg.data()), msg.size());
+      std::istream is(&mb);
+
+      is  >> v._w 
+          >> v._h
+          >> v._step
+          >> v._external_type
+          >> reinterpret_cast<int&>(v._format);
+
+      IB_ASSERT(!is.fail(), ib_error::ECONVERSION);
 
       if (v._shared_mem) {
         int bytes = zmq_recv(s, v._msg.data(), v._msg.size(), 0);
