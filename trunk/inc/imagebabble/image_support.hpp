@@ -80,38 +80,55 @@ namespace imagebabble {
   class image {
   public:
 
+    /** Predefined image format. If the given formats are not
+      * suited, choose FORMAT_UNKOWN and set the external image type
+      * via image::set_external_type. */
+    enum eformat {
+      /** Unknown image format */
+      FORMAT_UNKNOWN,
+      /** RGB format using 8 bits per channel. */
+      FORMAT_RGB_888,
+      /** BGR format using 8 bits per channel. */
+      FORMAT_BGR_888,
+      /** Grayscale image using 8 bit channel. */
+      FORMAT_GRAY_8
+    };
+
     /** Free function prototype when sharing user memory */
     typedef void free_fn(void *data, void *hint);
 
     /** Construct a new image. */
     inline image()
-      : _w(0), _h(0), _step(0), _type(-1), _shared_mem(false)
+      : _w(0), _h(0), _step(0), _external_type(-1), _format(FORMAT_UNKNOWN), _shared_mem(false)
     {}
 
     /** Construct a new image. The implementation will copy the header 
       * information and share the buffer by incrementing its reference count. */
     inline image(const image &other) 
-      : _w(other._w), _h(other._h), _step(other._step), _type(other._type), _shared_mem(other._shared_mem)
+      : _w(other._w), _h(other._h), _step(other._step), 
+      _external_type(other._external_type), 
+      _format(FORMAT_UNKNOWN), 
+      _shared_mem(other._shared_mem)
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
     }
 
     /** Construct a new image. Allocates the necessary image data buffer size. */
-    inline explicit image(int w, int h, int type, int step) 
-      : _msg(h*step), _w(w), _h(h), _step(step), _type(type), _shared_mem(false)
+    inline explicit image(int w, int h, int step) 
+      : _msg(h*step), _w(w), _h(h), _step(step), _external_type(-1), _format(FORMAT_UNKNOWN), _shared_mem(false)
     {}
   
     /** Construct a new image. The implementation does not take ownership of the passed 
       * bock. Freeing it is a responsibility of the caller. The implementation will ensure
       * that any custom free function of share_mem is being called. */
-    inline explicit image(int w, int h, int type, int step, void *data, const share_mem &s) 
-      : _msg(data, h*step, s.get_free_fn(), s.get_hint()), _w(w), _h(h), _step(step), _type(type), _shared_mem(true)
+    inline explicit image(int w, int h, int step, void *data, const share_mem &s) 
+      : _msg(data, h*step, s.get_free_fn(), s.get_hint()), _w(w), _h(h), _step(step), _external_type(-1), _format(FORMAT_UNKNOWN), _shared_mem(true)
     {}
 
     /** Construct a new image. The implementation will copy the data given. The newly
       * allocated buffer will be released when its reference count hits zero. */
-    inline explicit image(int w, int h, int type, int step, void *data, const copy_mem &) 
-      : _msg(h*step), _w(w), _h(h), _type(type), _step(step), _shared_mem(false)
+    inline explicit image(int w, int h, int step, void *data, const copy_mem &) 
+      : _msg(h*step), _w(w), _h(h), _step(step), _external_type(-1), _format(FORMAT_UNKNOWN), _shared_mem(false)
     {
       memcpy(_msg.data(), data, _msg.size());      
     }
@@ -120,7 +137,12 @@ namespace imagebabble {
 
     /** Construct a new image. Renders the source invalid. */
     inline image(image &&rhs)
-      : _msg(std::move(rhs._msg)), _shared_mem(rhs._shared_mem), _w(rhs._w), _h(rhs._h), _type(rhs._type), _step(rhs._step)
+      : _msg(std::move(rhs._msg)), 
+        _shared_mem(rhs._shared_mem), 
+        _w(rhs._w), _h(rhs._h), 
+        _external_type(rhs._external_type), 
+        _format(rhs._format),
+        _step(rhs._step)
     {}
 
     /** Move assignment operator. Renders the source invalid. */
@@ -131,7 +153,8 @@ namespace imagebabble {
         _shared_mem = rhs._shared_mem;
         _w = rhs._w;
         _h = rhs._h;
-        _type = rhs._type;
+        _external_type = rhs._external_type;
+        _format = rhs._format;
         _step = rhs._step;
       }
       return *this;
@@ -148,7 +171,8 @@ namespace imagebabble {
         _w = rhs._w;
         _h = rhs._h;
         _step = rhs._step;
-        _type = rhs._type;
+        _external_type = rhs._external_type;
+        _format = rhs._format;
       }
       return *this;
     }
@@ -191,10 +215,34 @@ namespace imagebabble {
       return _step; 
     }
 
-    /** Get number of bytes per pixel. */
-    inline int get_type() const 
+    /** Get external type information. The external type information
+      * is of informative usage to the caller only. No calculations are
+      * performed upon it internally. */
+    inline int get_external_type() const 
     { 
-      return _type; 
+      return _external_type; 
+    }
+
+    /** Set external type information. The external type information
+      * is of informative usage to the caller only. No calculations are
+      * performed upon it internally. */
+    inline void set_external_type(int type) 
+    { 
+      _external_type = type; 
+    }
+
+    /** Get image format information. Setting the format helps the implementation
+      * to take correct decisions such as conversion. */
+    inline eformat get_format() const 
+    { 
+      return _format; 
+    }
+
+    /** Set image format information. Setting the format helps the implementation
+      * to take correct decisions such as conversion.*/
+    inline void set_format(eformat f) 
+    { 
+      _format = f; 
     }
 
     /** Copy image data buffer to given destination. */
@@ -209,7 +257,8 @@ namespace imagebabble {
     friend void io::recv(zmq::socket_t &, image &);
 
     zmq::message_t _msg;
-    int _w, _h, _step, _type;
+    int _w, _h, _step, _external_type;
+    eformat _format;
     bool _shared_mem;
   };
   
@@ -333,9 +382,10 @@ namespace imagebabble {
     {      
       io::send(s, v.get_width(), ZMQ_SNDMORE);
       io::send(s, v.get_height(), ZMQ_SNDMORE);
-      io::send(s, v.get_type(), ZMQ_SNDMORE);
       io::send(s, v.get_step(), ZMQ_SNDMORE);
-      
+      io::send(s, v.get_external_type(), ZMQ_SNDMORE);
+      io::send(s, (int)v.get_format(), ZMQ_SNDMORE);
+
       // Need to copy in order to increment reference count, otherwise the 
       // input buffer is nullified.
       
@@ -353,8 +403,9 @@ namespace imagebabble {
     {
       io::recv(s, v._w);
       io::recv(s, v._h);
-      io::recv(s, v._type);
       io::recv(s, v._step);
+      io::recv(s, v._external_type);
+      int f; io::recv(s, f); v._format = static_cast<image::eformat>(f);
 
       if (v._shared_mem) {
         int bytes = zmq_recv(s, v._msg.data(), v._msg.size(), 0);

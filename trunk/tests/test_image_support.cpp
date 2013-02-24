@@ -50,40 +50,51 @@ BOOST_AUTO_TEST_CASE(image)
     BOOST_REQUIRE_EQUAL(0, i.get_width());
     BOOST_REQUIRE_EQUAL(0, i.get_height());
     BOOST_REQUIRE_EQUAL(0, i.get_step());
-    BOOST_REQUIRE_EQUAL(-1, i.get_type());
+    BOOST_REQUIRE_EQUAL(-1, i.get_external_type());
+    BOOST_REQUIRE_EQUAL(ib::image::FORMAT_UNKNOWN, i.get_format());
     BOOST_REQUIRE_EQUAL(0, i.size());    
   }
 
   {
-    ib::image i(640, 480, any_type, 640*3);
+    ib::image i(640, 480, 640*3);
+    i.set_external_type(any_type);
+    i.set_format(ib::image::FORMAT_RGB_888);
+
     BOOST_REQUIRE_EQUAL(640, i.get_width());
     BOOST_REQUIRE_EQUAL(480, i.get_height());
     BOOST_REQUIRE_EQUAL(640*3, i.get_step());
-    BOOST_REQUIRE_EQUAL(0, i.get_type());
+    BOOST_REQUIRE_EQUAL(any_type, i.get_external_type());
+    BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i.get_format());
     BOOST_REQUIRE_EQUAL(640*480*3, i.size());    
   }
 
   {
     int x = 10;
-    ib::image i(1, 1, any_type, sizeof(int)*1, &x, ib::share_mem());
+    ib::image i(1, 1, sizeof(int)*1, &x, ib::share_mem());
+    i.set_external_type(any_type);
+    i.set_format(ib::image::FORMAT_RGB_888);
 
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
     BOOST_REQUIRE_EQUAL(sizeof(int), i.get_step());
     BOOST_REQUIRE_EQUAL(sizeof(int), i.size());    
-    BOOST_REQUIRE_EQUAL(0, i.get_type());
+    BOOST_REQUIRE_EQUAL(any_type, i.get_external_type());
+    BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i.get_format());
     BOOST_REQUIRE_EQUAL(&x, i.ptr<int>());    
   }
 
   {
     int x = 10;
-    ib::image i(1, 1, any_type, sizeof(int)*1,&x, ib::copy_mem());
-    
+    ib::image i(1, 1, sizeof(int)*1,&x, ib::copy_mem());
+    i.set_external_type(any_type);
+    i.set_format(ib::image::FORMAT_RGB_888);
+
     BOOST_REQUIRE_EQUAL(1, i.get_width());
     BOOST_REQUIRE_EQUAL(1, i.get_height());
     BOOST_REQUIRE_EQUAL(sizeof(int), i.get_step());
     BOOST_REQUIRE_EQUAL(sizeof(int), i.size());    
-    BOOST_REQUIRE_EQUAL(0, i.get_type());
+    BOOST_REQUIRE_EQUAL(any_type, i.get_external_type());
+    BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i.get_format());
     BOOST_REQUIRE_NE(&x, i.ptr<int>());    
   }
 
@@ -93,7 +104,9 @@ BOOST_AUTO_TEST_CASE(image)
     
     {
       ib::share_mem s(free_fn_count, &count_released);
-      ib::image i(1, 1, any_type, sizeof(int)*1, &x, s);
+      ib::image i(1, 1, sizeof(int)*1, &x, s);
+      i.set_external_type(any_type);
+      i.set_format(ib::image::FORMAT_RGB_888);
       ib::image i2 = i;
     }
 
@@ -106,13 +119,16 @@ BOOST_AUTO_TEST_CASE(image)
    {
 
       int x = 10;
-      ib::image i0(1, 1, any_type, sizeof(int),&x, ib::share_mem());
+      ib::image i0(1, 1, sizeof(int),&x, ib::share_mem());
+      i0.set_external_type(any_type);
+      i0.set_format(ib::image::FORMAT_RGB_888);
       ib::image i1(std::move(i0));
 
       BOOST_REQUIRE_EQUAL(1, i1.get_width());
       BOOST_REQUIRE_EQUAL(1, i1.get_height());
       BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_step());
-      BOOST_REQUIRE_EQUAL(any_type, i1.get_type());
+      BOOST_REQUIRE_EQUAL(any_type, i1.get_external_type());
+      BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i1.get_format());
       BOOST_REQUIRE_EQUAL(sizeof(int), i1.size());    
       BOOST_REQUIRE_EQUAL(&x, i1.ptr<int>());    
 
@@ -121,7 +137,8 @@ BOOST_AUTO_TEST_CASE(image)
       BOOST_REQUIRE_EQUAL(1, i2.get_width());
       BOOST_REQUIRE_EQUAL(1, i2.get_height());
       BOOST_REQUIRE_EQUAL(sizeof(int), i2.get_step());
-      BOOST_REQUIRE_EQUAL(any_type, i2.get_type());
+      BOOST_REQUIRE_EQUAL(any_type, i2.get_external_type());
+      BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i2.get_format());
       BOOST_REQUIRE_EQUAL(sizeof(int), i2.size());    
       BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());   
 
@@ -130,7 +147,8 @@ BOOST_AUTO_TEST_CASE(image)
       BOOST_REQUIRE_EQUAL(1, i2.get_width());
       BOOST_REQUIRE_EQUAL(1, i2.get_height());
       BOOST_REQUIRE_EQUAL(sizeof(int), i2.get_step());
-      BOOST_REQUIRE_EQUAL(any_type, i2.get_type());
+      BOOST_REQUIRE_EQUAL(any_type, i2.get_external_type());
+      BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i2.get_format());
       BOOST_REQUIRE_EQUAL(sizeof(int), i2.size());    
       BOOST_REQUIRE_EQUAL(&x, i2.ptr<int>());
 
@@ -144,20 +162,25 @@ BOOST_AUTO_TEST_CASE(image)
 
       // should ref-count
 
-      i0 = ib::image(1, elems, any_type, sizeof(int));
+      i0 = ib::image(1, elems, sizeof(int));
+      i0.set_external_type(any_type);
+      i0.set_format(ib::image::FORMAT_RGB_888);
       int *adr = i0.ptr<int>();
       i1 = std::move(i0);
 
       BOOST_REQUIRE_EQUAL(1, i1.get_width());
       BOOST_REQUIRE_EQUAL(elems, i1.get_height());
       BOOST_REQUIRE_EQUAL(sizeof(int), i1.get_step());
-      BOOST_REQUIRE_EQUAL(any_type, i1.get_type());
+      BOOST_REQUIRE_EQUAL(any_type, i1.get_external_type());
+      BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, i1.get_format());
       BOOST_REQUIRE_EQUAL(elems * sizeof(int), i1.size());    
       BOOST_REQUIRE_EQUAL(adr, i1.ptr<int>());
 
       // should not ref count
 
-      i0 = ib::image(1, elems - 1, any_type, sizeof(int));
+      i0 = ib::image(1, elems - 1, sizeof(int));
+      i0.set_external_type(any_type);
+      i0.set_format(ib::image::FORMAT_RGB_888);
       adr = i0.ptr<int>();
       i1 = std::move(i0);
       BOOST_REQUIRE_NE(adr, i1.ptr<int>());
@@ -171,7 +194,9 @@ void server_image_fnc()
   ib::reliable_server< ib::image > s;
   s.startup();
 
-  ib::image img(1, 5, any_type, sizeof(int));
+  ib::image img(1, 5, sizeof(int));
+  img.set_external_type(any_type);
+  img.set_format(ib::image::FORMAT_RGB_888);
   for (int i = 0; i < img.get_height(); ++i) {
     img.ptr<int>()[i] = i;
   } 
@@ -191,7 +216,8 @@ void client_image_fnc()
   BOOST_REQUIRE_EQUAL(1, img.get_width());
   BOOST_REQUIRE_EQUAL(5, img.get_height());
   BOOST_REQUIRE_EQUAL(sizeof(int), img.get_step());
-  BOOST_REQUIRE_EQUAL(any_type, img.get_type());
+  BOOST_REQUIRE_EQUAL(any_type, img.get_external_type());
+  BOOST_REQUIRE_EQUAL(ib::image::FORMAT_RGB_888, img.get_format());
   BOOST_REQUIRE_EQUAL(0, img.ptr<int>()[0]);
   BOOST_REQUIRE_EQUAL(1, img.ptr<int>()[1]);
   BOOST_REQUIRE_EQUAL(2, img.ptr<int>()[2]);
@@ -217,9 +243,9 @@ void server_image_group_fnc()
 
   ib::image_group g;
   g.set_id("my frame");
-  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
-  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image two");
-  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image three");
+  g.add_image(ib::image(1, 5, sizeof(int)), "image one");
+  g.add_image(ib::image(1, 5, sizeof(int)), "image two");
+  g.add_image(ib::image(1, 5, sizeof(int)), "image three");
 
   for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
   for (int i = 0; i < g.get_images()[1].get_height(); ++i) { g.get_images()[1].ptr<int>()[i] = i; }
@@ -274,7 +300,7 @@ void server_image_group_many_fnc()
 
   ib::image_group g;
   g.set_id("content");
-  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");    
+  g.add_image(ib::image(1, 5, sizeof(int)), "image one");    
   for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     
   BOOST_REQUIRE(s.publish(g));
@@ -326,7 +352,7 @@ void server_image_group_preexisting_fnc()
   s.startup();
 
   ib::image_group g;
-  g.add_image(ib::image(1, 5, any_type, sizeof(int)), "image one");
+  g.add_image(ib::image(1, 5, sizeof(int)), "image one");
     
   for (int i = 0; i < g.get_images()[0].get_height(); ++i) { g.get_images()[0].ptr<int>()[i] = i; }
     
@@ -343,7 +369,7 @@ void client_image_group_preexisting_fnc()
   int arr[5];
 
   ib::image_group g;
-  g.add_image(ib::image(1, 5, any_type, sizeof(int), arr, ib::share_mem()));
+  g.add_image(ib::image(1, 5, sizeof(int), arr, ib::share_mem()));
 
   BOOST_REQUIRE(c.receive(g));
   BOOST_REQUIRE_EQUAL(1, g.get_images().size());
