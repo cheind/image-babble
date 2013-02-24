@@ -364,6 +364,37 @@ namespace imagebabble {
       _id = id;
     }
 
+    /** Find a named image. Finds the first image with the given name.
+      * Search is case sensitive.
+      *
+      * \param[in] name name of image
+      * \returns pointer to image when found
+      * \return null-pointer when no such image is found. 
+      */
+    inline image *find_named_image(const std::string &name) 
+    {
+      // Invoke the const version, so we have to write the algorithm only once. */
+      const image_group &self = *this;
+      return const_cast< image* >(self.find_named_image(name));      
+    }
+
+    /** Find a named image. Finds the first image with the given name.
+      * Search is case sensitive.
+      *
+      * \param[in] name name of image
+      * \returns pointer to image when found
+      * \return null-pointer when no such image is found. 
+      */
+    inline const image *find_named_image(const std::string &name) const
+    {
+      std::vector<std::string>::const_iterator iter = std::find(_names.begin(), _names.end(), name);
+      if (iter == _names.end()) 
+        return 0;
+
+      size_t id = static_cast<size_t>(std::distance(_names.begin(), iter));
+      return &_images[id];
+    }
+
   private:
     
     friend void io::send(zmq::socket_t &, const image_group &, int);
