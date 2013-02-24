@@ -40,14 +40,26 @@ namespace imagebabble {
   template<class MemOp>
   inline void cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
   {
-    to = image(src.cols, src.rows, src.type(), src.step, src.data, m);
+    to = image(src.cols, src.rows, src.step, src.data, m);
+    to.set_external_type(src.type());
   }
 
   /** Convert from image to OpenCV matrix. */
   inline void cvt_image(const image &src, cv::Mat &to, const copy_mem &m) 
   {
-    to.create(src.get_height(), src.get_width(), src.get_type());
-    
+    switch (src.get_format()) {
+    case image::FORMAT_BGR_888:
+    case image::FORMAT_RGB_888:
+      to.create(src.get_height(), src.get_width(), CV_8UC3);
+      break;
+    case image::FORMAT_GRAY_8:
+      to.create(src.get_height(), src.get_width(), CV_8UC1);
+      break;
+    case image::FORMAT_UNKNOWN:
+      to.create(src.get_height(), src.get_width(), src.get_external_type());
+      break;
+    }
+
     if ((to.rows * to.step) != src.size()) {
       throw ib_error(ib_error::ECONVERSION);
     }
@@ -58,9 +70,26 @@ namespace imagebabble {
   /** Convert from image to OpenCV matrix. */
   inline void cvt_image(const image &src, cv::Mat &to, const share_mem &m) 
   {
-    to = cv::Mat(
-      src.get_height(), src.get_width(), src.get_type(), 
-      const_cast<void*>(src.ptr<void>()), src.get_step()
+    int type = -1;
+
+    switch (src.get_format()) {
+    case image::FORMAT_BGR_888:
+    case image::FORMAT_RGB_888:
+      type = CV_8UC3;
+      break;
+    case image::FORMAT_GRAY_8:
+      type = CV_8UC1;
+      break;
+    case image::FORMAT_UNKNOWN:
+      // Use external type
+      type = src.get_external_type();
+      break;
+    }
+
+    to = cv::Mat( 
+      src.get_height(), src.get_width(), type, 
+      const_cast<void*>(src.ptr<void>()), 
+      src.get_step()
     );
   }
   

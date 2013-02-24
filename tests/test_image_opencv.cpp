@@ -38,7 +38,36 @@ namespace ib = imagebabble;
 BOOST_AUTO_TEST_CASE(convert)
 {
   cv::Mat cv_img(cv::Size(640,480), CV_8UC3);
-  ib::image ib_img = ib::cvt_image< ib::image >(cv_img, ib::share_mem());
+  ib::image ib_img = ib::cvt_image< ib::image >(cv_img, ib::share_mem());  
+  cv::Mat cv_img2 = ib::cvt_image< cv::Mat > (ib_img, ib::share_mem());
+
+  BOOST_REQUIRE_EQUAL(ib::image::FORMAT_UNKNOWN, ib_img.get_format());
+
+  BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img2.rows);
+  BOOST_REQUIRE_EQUAL(cv_img.cols, cv_img2.cols);
+  BOOST_REQUIRE_EQUAL(cv_img.step, cv_img2.step);
+  BOOST_REQUIRE_EQUAL(cv_img.type(), cv_img2.type());
+  BOOST_REQUIRE_EQUAL(cv_img.data, cv_img2.data);
+  BOOST_REQUIRE_EQUAL(cv_img.data, ib_img.ptr<void>());
+
+  ib::image ib_img2 = ib::cvt_image< ib::image >(cv_img, ib::copy_mem());
+  cv::Mat cv_img3 = ib::cvt_image< cv::Mat > (ib_img2, ib::copy_mem());
+
+  BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img3.rows);
+  BOOST_REQUIRE_EQUAL(cv_img.cols, cv_img3.cols);
+  BOOST_REQUIRE_EQUAL(cv_img.step, cv_img3.step);
+  BOOST_REQUIRE_EQUAL(cv_img.type(), cv_img3.type());
+  BOOST_REQUIRE_NE(cv_img.data, cv_img3.data);
+  BOOST_REQUIRE_NE(cv_img.data, ib_img2.ptr<void>());
+  BOOST_REQUIRE_NE(cv_img3.data, ib_img2.ptr<void>());
+}
+
+BOOST_AUTO_TEST_CASE(convert_format)
+{
+  cv::Mat cv_img(cv::Size(640,480), CV_8UC3);
+  ib::image ib_img = ib::cvt_image< ib::image >(cv_img, ib::share_mem());  
+  ib_img.set_format(ib::image::FORMAT_RGB_888);
+  ib_img.set_external_type(-1);
   cv::Mat cv_img2 = ib::cvt_image< cv::Mat > (ib_img, ib::share_mem());
 
   BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img2.rows);
