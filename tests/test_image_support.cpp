@@ -273,6 +273,9 @@ void client_image_group_fnc()
   BOOST_REQUIRE_EQUAL(std::string("image two"), g.get_names()[1]);
   BOOST_REQUIRE_EQUAL(std::string("image three"), g.get_names()[2]);
 
+  BOOST_REQUIRE(g.find_named_image("image two") == &g.get_images()[1]);
+  BOOST_REQUIRE(g.find_named_image("unkown") == 0);
+
   BOOST_REQUIRE_EQUAL(5, g.get_images()[0].get_height());
   BOOST_REQUIRE_EQUAL(5, g.get_images()[1].get_height());
   BOOST_REQUIRE_EQUAL(5, g.get_images()[2].get_height());
