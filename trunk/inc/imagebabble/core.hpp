@@ -42,8 +42,10 @@
 /** Whether the compiler supports move constructors and assignment operators. */
 #define IB_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
 
-/** The version number of the exchange protocol implementation.  */
-#define IB_EXCHANGE_PROTO_VERSION 1    
+/** The version identification for fast protocol.  */
+#define IB_EXCHANGE_PROTO_FAST_VERSION "f001"    
+/** The version identification for reliable protocol.  */
+#define IB_EXCHANGE_PROTO_RELIABLE_VERSION "r001"
 
 /** Assert expression or throw imagebabble::ib_error */
 #define IB_ASSERT(expr, reason)               \
@@ -131,7 +133,9 @@ namespace imagebabble {
       /** Pre-existing user memory is too small to receive data. */
       EBUFFERTOOSMALL,
       /** Socket is invalid */
-      EINVALIDSOCKET
+      EINVALIDSOCKET,
+      /** Incompatible talk versions */
+      EWRONGPROTO
     };
 
     /** Construct using unkown error. */
@@ -176,6 +180,8 @@ namespace imagebabble {
         return "Pre-allocated buffer was too small";
       case EINVALIDSOCKET:
         return "Socket isn't yet allocated.";
+      case EWRONGPROTO:
+        return "Wrong protocol version or type.";
       default:
         return "Unknown error";
       }
@@ -533,6 +539,7 @@ namespace imagebabble {
     virtual bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+      io::send(*_s, IB_EXCHANGE_PROTO_FAST_VERSION, ZMQ_SNDMORE);
       io::send(*_s, t);
       return true;
     }
@@ -617,8 +624,9 @@ namespace imagebabble {
         std::hash_set<std::string>::iterator i_end = clients.end();
 
         for (i; i != i_end; ++i) {
-          // Construct package for client
+          // Construct package for client          
           io::send(*_s, *i, ZMQ_SNDMORE);
+          io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE);
           io::send(*_s, t);
         }
 
@@ -680,6 +688,13 @@ namespace imagebabble {
           return false;
         }
 
+        // Check for correct version
+        std::string version;
+        io::recv(*_s, version);
+        if (version != IB_EXCHANGE_PROTO_FAST_VERSION)
+          throw ib_error(ib_error::EWRONGPROTO);
+
+        // Receive payload
         io::recv(*_s, t);
         
         return true;
@@ -742,6 +757,11 @@ namespace imagebabble {
         if (!io::is_data_pending(*_s, timeout_ms)) {
           return false;
         }
+
+        std::string version;
+        io::recv(*_s, version);
+        if (version != IB_EXCHANGE_PROTO_RELIABLE_VERSION)
+          throw ib_error(ib_error::EWRONGPROTO);
         
         // Data is here, return
         io::recv(*_s, t);
