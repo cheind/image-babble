@@ -107,7 +107,7 @@ namespace imagebabble {
     inline image(const image &other) 
       : _w(other._w), _h(other._h), _step(other._step), 
       _external_type(other._external_type), 
-      _format(FORMAT_UNKNOWN), 
+      _format(other._format), 
       _shared_mem(other._shared_mem)
     {
       _msg.copy(const_cast<zmq::message_t*>(&other._msg));
