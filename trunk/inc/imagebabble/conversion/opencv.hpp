@@ -41,6 +41,14 @@ namespace imagebabble {
   inline void cvt_image(const cv::Mat &src, image &to, const MemOp &m) 
   {
     to = image(src.cols, src.rows, src.step, src.data, m);
+    switch(src.type()) {
+      case CV_8UC3:
+        to.set_format(image::FORMAT_BGR_888);
+        break;
+      case CV_8UC1:
+        to.set_format(image::FORMAT_GRAY_8);
+        break;
+    }
     to.set_external_type(src.type());
   }
 

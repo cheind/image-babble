@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(convert)
   ib::image ib_img = ib::cvt_image< ib::image >(cv_img, ib::share_mem());  
   cv::Mat cv_img2 = ib::cvt_image< cv::Mat > (ib_img, ib::share_mem());
 
-  BOOST_REQUIRE_EQUAL(ib::image::FORMAT_UNKNOWN, ib_img.get_format());
+  BOOST_REQUIRE_EQUAL(ib::image::FORMAT_BGR_888, ib_img.get_format());
 
   BOOST_REQUIRE_EQUAL(cv_img.rows, cv_img2.rows);
   BOOST_REQUIRE_EQUAL(cv_img.cols, cv_img2.cols);
