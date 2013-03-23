@@ -18,6 +18,7 @@ int main(int argc, char *argv[])
 {
   // Start client
   ib::fast_client< ib::image > ic;
+  ic.set_max_pending_inbound(10);
   ic.startup("tcp://127.0.0.1:6000");
 
   // Try to receive image with timeout

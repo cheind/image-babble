@@ -23,10 +23,11 @@ int main(int argc, char *argv[])
 {  
   // Start server
   ib::fast_server< ib::image > is;
+  is.set_max_pending_outbound(10);
   is.startup("tcp://*:6000");
    
   // Open video device
-  cv::VideoCapture vc(0);
+  cv::VideoCapture vc("Wildlife.wmv");
   cv::Mat cv_img;
    
   // While more images are available ...
