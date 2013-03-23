@@ -199,12 +199,14 @@ namespace imagebabble {
 
     /** Construct from context. */
     network_entity(const context_ptr &c)
-      :_ctx(c)
+      :_ctx(c), _hwm_snd(-1), _hwm_recv(-1), _no_linger(true)
     {}
 
     /** Destructor. */
     virtual ~network_entity()
-    {}
+    {
+      shutdown();
+    }
 
     /** Get context */
     inline context_ptr get_context() const {
@@ -228,12 +230,47 @@ namespace imagebabble {
         _s.reset();
       }   
     }
+
+    /** Set the maximum number of pending message(parts) in the send queue 
+      * before the socket enters an exceptional state */
+    void set_max_pending_outbound(int nmessages) {
+      _hwm_snd = nmessages;
+    }
+
+    /** Set the maximum number of pending message(parts) in the receive queue 
+      * before the socket enters an exceptional state */
+    void set_max_pending_inbound(int nmessages) {
+      _hwm_recv = nmessages;
+    }
     
 
   protected:    
 
+    void apply_socket_options() {
+      if (_s) {
+        
+        // Don't wait for pending messages to be send on shutdown.
+        if (_no_linger) {
+          int linger = 0;
+          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_LINGER, &linger, sizeof(int)));
+        }
+
+        if (_hwm_snd >= 0) {
+          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_SNDHWM, &_hwm_snd, sizeof(int)));
+        }
+
+        if (_hwm_recv >= 0) {
+          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_RCVHWM, &_hwm_recv, sizeof(int)));
+        }
+      }
+    }
+
+
     context_ptr _ctx; ///< ZMQ context
     socket_ptr _s;    ///< ZMQ socket
+    int _hwm_snd;     ///< High water mark for outbound messages
+    int _hwm_recv;    ///< High water mark for inbound messages
+    bool _no_linger;  ///< Discard all messages on shutdown
 
   private:
     /** Disabled copy constructor */
@@ -268,8 +305,7 @@ namespace imagebabble {
       * \returns false if timeout occurred.
       * \throws ib_error on error.
       **/
-    virtual bool publish(const T &t, int timeout_ms, size_t min_serve) = 0;
-    
+    virtual bool publish(const T &t, int timeout_ms, size_t min_serve) = 0;  
   };
 
   /** Base class for clients. 
@@ -508,10 +544,8 @@ namespace imagebabble {
     {}
 
     /** Destructor. */
-    ~fast_server()
-    {
-      shutdown();
-    }
+    virtual ~fast_server()
+    {}
 
     /** Start a new connection on the given endpoint. This method can be called
       * multiple times to publish the same data on multiple endpoints.
@@ -523,6 +557,7 @@ namespace imagebabble {
     { 
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
+        network_entity::apply_socket_options();
       }
 
       IB_CONVERT_ERROR(_s->bind(addr.c_str()));
@@ -564,10 +599,8 @@ namespace imagebabble {
     {}
 
     /** Destructor. */
-    ~reliable_server()
-    {
-      shutdown();
-    }
+    virtual ~reliable_server()
+    {}
 
     /** Start a new connection on the given endpoint. This method can be called
       * multiple times to publish the same data on multiple endpoints.
@@ -579,6 +612,7 @@ namespace imagebabble {
     {  
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
+        network_entity::apply_socket_options();
       }
 
       IB_CONVERT_ERROR(_s->bind(addr.c_str()));
@@ -648,6 +682,9 @@ namespace imagebabble {
       : basic_client<T>(context_ptr(new zmq::context_t(1)))
     {}
 
+    virtual ~fast_client()
+    {}
+
     /** Start a new connection to the given endpoint. If called multiple times, the client
       * will connect to more endpoints. 
       *
@@ -658,9 +695,8 @@ namespace imagebabble {
     {
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
-
-        int linger = 0;
-        IB_CONVERT_ERROR(_s->setsockopt(ZMQ_LINGER, &linger, sizeof(int)));
+      
+        network_entity::apply_socket_options();
         IB_CONVERT_ERROR(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
       }
 
@@ -718,6 +754,9 @@ namespace imagebabble {
       : basic_client<T>(context_ptr(new zmq::context_t(1)))
     {}
 
+    virtual ~reliable_client()
+    {}
+
     /** Start a new connection to the given endpoint. If called multiple times, 
       * the client will connect to more endpoints. 
       *
@@ -729,9 +768,7 @@ namespace imagebabble {
 
       if (!_s) {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
-      
-        int linger = 0; 
-        IB_CONVERT_ERROR(_s->setsockopt(ZMQ_LINGER, &linger, sizeof(int)));   
+        network_entity::apply_socket_options();
       }
 
       IB_CONVERT_ERROR(_s->connect(addr.c_str()));
