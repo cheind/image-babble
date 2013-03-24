@@ -40,10 +40,10 @@ namespace imagebabble {
   class image_group;
 
   namespace io {
-    void send(zmq::socket_t &, const image &, int);
-    void recv(zmq::socket_t &, image &);
-    void send(zmq::socket_t &, const image_group &, int);
-    void recv(zmq::socket_t &, image_group &);
+    bool send(zmq::socket_t &, const image &, int);
+    bool recv(zmq::socket_t &, image &, int);
+    bool send(zmq::socket_t &, const image_group &, int);
+    bool recv(zmq::socket_t &, image_group &, int);
   };
   
   /** Represents a generic image. An image consists of basic header information
@@ -253,8 +253,8 @@ namespace imagebabble {
 
   private:
 
-    friend void io::send(zmq::socket_t &, const image &, int);
-    friend void io::recv(zmq::socket_t &, image &);
+    friend bool io::send(zmq::socket_t &, const image &, int);
+    friend bool io::recv(zmq::socket_t &, image &, int);
 
     zmq::message_t _msg;
     int _w, _h, _step, _external_type;
@@ -397,8 +397,8 @@ namespace imagebabble {
 
   private:
     
-    friend void io::send(zmq::socket_t &, const image_group &, int);
-    friend void io::recv(zmq::socket_t &, image_group &);
+    friend bool io::send(zmq::socket_t &, const image_group &, int);
+    friend bool io::recv(zmq::socket_t &, image_group &, int);
 
     std::vector<image> _images;
     std::vector<std::string> _names;
@@ -409,7 +409,7 @@ namespace imagebabble {
   namespace io {
     
     /** Send image. */
-    inline void send(zmq::socket_t &s, const image &v, int flags = 0) 
+    inline bool send(zmq::socket_t &s, const image &v, int flags) 
     { 
       std::ostringstream ostr;
       ostr << v.get_width() << " "
@@ -419,7 +419,8 @@ namespace imagebabble {
            << v.get_format();
 
       IB_ASSERT(ostr.good(), ib_error::ECONVERSION);
-      io::send(s, ostr.str(), ZMQ_SNDMORE);
+
+      IB_FIRST_PART(io::send(s, ostr.str(), flags | ZMQ_SNDMORE));
       
       // Need to copy in order to increment reference count, otherwise the 
       // input buffer is nullified.
@@ -427,18 +428,21 @@ namespace imagebabble {
       zmq::message_t m;
       m.copy(const_cast<zmq::message_t*>(&v._msg));
 
-      IB_ASSERT_ZMQ(s.send(m, flags));
+      IB_NEXT_PART(s.send(m, flags));
+
+      return true;
     }
 
     /** Receive image data. If image data points to pre-allocated user memory,
       * the implementation attempts to receive data directly into that buffer.
       * If the buffer is too small to fit the content, the received bytes are
       * truncated to fit and false is returned. */
-    inline void recv(zmq::socket_t &s, image &v) 
+    inline bool recv(zmq::socket_t &s, image &v, int flags) 
     {
       zmq::message_t msg;
-      IB_ASSERT_ZMQ(s.recv(&msg));
 
+      IB_FIRST_PART(s.recv(&msg, flags));
+      
       in_memory_buffer mb(static_cast<char*>(msg.data()), msg.size());
       std::istream is(&mb);
 
@@ -455,24 +459,30 @@ namespace imagebabble {
         int maxbytes = static_cast<int>(v._msg.size());
         IB_ASSERT(bytes <= maxbytes, ib_error::EBUFFERTOOSMALL);
       } else {
-        IB_ASSERT_ZMQ(s.recv(&v._msg));
+        IB_NEXT_PART(s.recv(&v._msg, flags));        
       }
+
+      return true;
     }
 
     /** Send image group. */
-    inline void send(zmq::socket_t &s, const image_group &v, int flags = 0) 
-    {     
-      io::send(s, v.get_id(), ZMQ_SNDMORE);
-      io::send(s, v.get_names(), ZMQ_SNDMORE);
-      io::send(s, v.get_images(), flags);
+    inline bool send(zmq::socket_t &s, const image_group &v, int flags) 
+    {
+      IB_FIRST_PART(io::send(s, v.get_id(), flags | ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(s, v.get_names(), flags | ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(s, v.get_images(), flags));
+
+      return true;
     }
 
     /** Receive image group. */
-    inline void recv(zmq::socket_t &s, image_group &v) 
+    inline bool recv(zmq::socket_t &s, image_group &v, int flags) 
     {
-      io::recv(s, v._id);
-      io::recv(s, v._names);
-      io::recv(s, v._images);
+      IB_FIRST_PART(io::recv(s, v._id, flags));
+      IB_NEXT_PART(io::recv(s, v._names, flags));
+      IB_NEXT_PART(io::recv(s, v._images, flags));
+
+      return true;
     }
   }
 
