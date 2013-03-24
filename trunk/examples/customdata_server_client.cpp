@@ -28,19 +28,23 @@ namespace imagebabble {
   namespace io {
 
     /** Send a person */
-    void send(zmq::socket_t &s, const person &p, int flags = 0)
+    bool send(zmq::socket_t &s, const person &p, int flags)
     {
-      io::send(s, p.name, ZMQ_SNDMORE);
-      io::send(s, p.age, ZMQ_SNDMORE);
-      io::send(s, p.friends, flags);
+      IB_FIRST_PART(io::send(s, p.name, flags | ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(s, p.age, flags | ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(s, p.friends, flags));
+
+      return true;
     }
 
     /** Receive a person */
-    void recv(zmq::socket_t &s, person &p)
+    bool recv(zmq::socket_t &s, person &p, int flags)
     {
-      io::recv(s, p.name);
-      io::recv(s, p.age);
-      io::recv(s, p.friends);
+      IB_FIRST_PART(io::recv(s, p.name, flags));
+      IB_NEXT_PART(io::recv(s, p.age, flags));
+      IB_NEXT_PART(io::recv(s, p.friends, flags));
+
+      return true;
     }
 
   }

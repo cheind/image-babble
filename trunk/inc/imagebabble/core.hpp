@@ -37,7 +37,7 @@
 #include <string>
 #include <limits>
 #include <vector>
-#include <hash_set>
+#include <unordered_set>
 
 /** Whether the compiler supports move constructors and assignment operators. */
 #define IB_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
@@ -53,22 +53,36 @@
     throw ::imagebabble::ib_error((reason));  \
   }                                           \
 
-/** Assert ZMQ related expression or throw imagebabble::ib_error */
-#define IB_ASSERT_ZMQ(expr)                   \
-  try {                                       \
-    IB_ASSERT((expr), ib_error::EZMQERROR);   \
-  } catch (const zmq::error_t &e) {           \
-    throw ib_error(ib_error::EZMQERROR, e);   \
-  }
-
-/** Assert ZMQ related expression or throw imagebabble::ib_error */
-#define IB_CONVERT_ERROR(expr)                \
+/** Catches ZMQ execptions and models them as imagebabble::ib_error */
+#define IB_CATCH_ZMQ_RETHROW(expr)            \
   try {                                       \
     (expr);                                   \
   } catch (const zmq::error_t &e) {           \
     throw ib_error(ib_error::EZMQERROR, e);   \
   }
 
+/** Try to send/recv first part of message. Returns false if sending receiving failed due to EAGAIN. 
+  * Re-models any ZMQ exception as imagebabble::ib_error. This macro is generally used to assert
+  * sending of the first message part. It provides an early-exit strategy in case ZMQ_DONTWAIT was
+  * passed as flag.
+  */
+#define IB_FIRST_PART(expr)                   \
+  try {                                       \
+    if (!(expr)) {                            \
+      return false;                           \
+    }                                         \
+  } catch (const zmq::error_t &e) {           \
+    throw ib_error(ib_error::EZMQERROR, e);   \
+  }
+
+/** Assert sending receiving a subsequent message part. Throws an imagebabble::ib_error if sending or 
+  * receiving fails, even if error code is EAGAIN. */
+#define IB_NEXT_PART(expr)                    \
+  try {                                       \
+    IB_ASSERT((expr), ib_error::EINCOMPLETE); \
+  } catch (const zmq::error_t &e) {           \
+    throw ib_error(ib_error::EZMQERROR, e);   \
+  }
 
 /** A lightweight C++ library to send and receive images via networks */
 namespace imagebabble {
@@ -130,10 +144,14 @@ namespace imagebabble {
       EZMQERROR,
       /** Conversion from or to a specific data type failed. */
       ECONVERSION,
+      /** Sending or receiving failed because of missing data. */
+      EINCOMPLETE,
       /** Pre-existing user memory is too small to receive data. */
       EBUFFERTOOSMALL,
       /** Socket is invalid */
       EINVALIDSOCKET,
+      /** Parameter out of range */
+      EPARAMRANGE,
       /** Incompatible talk versions */
       EWRONGPROTO
     };
@@ -176,12 +194,16 @@ namespace imagebabble {
         return zmq_strerror(_zmq_errno);
       case ECONVERSION:
         return "Type conversion failed";
+      case EINCOMPLETE:
+        return "Sending or receiving multi-part message failed. Try again.";
       case EBUFFERTOOSMALL:
         return "Pre-allocated buffer was too small";
       case EINVALIDSOCKET:
         return "Socket isn't yet allocated.";
       case EWRONGPROTO:
         return "Wrong protocol version or type.";
+      case EPARAMRANGE:
+        return "Parameter is out of range.";
       default:
         return "Unknown error";
       }
@@ -242,25 +264,25 @@ namespace imagebabble {
     void set_max_pending_inbound(int nmessages) {
       _hwm_recv = nmessages;
     }
-    
-
+   
   protected:    
 
+    /** Apply common socket options */
     void apply_socket_options() {
       if (_s) {
         
         // Don't wait for pending messages to be send on shutdown.
         if (_no_linger) {
           int linger = 0;
-          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_LINGER, &linger, sizeof(int)));
+          IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_LINGER, &linger, sizeof(int)));
         }
 
         if (_hwm_snd >= 0) {
-          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_SNDHWM, &_hwm_snd, sizeof(int)));
+          IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_SNDHWM, &_hwm_snd, sizeof(int)));
         }
 
         if (_hwm_recv >= 0) {
-          IB_CONVERT_ERROR(_s->setsockopt(ZMQ_RCVHWM, &_hwm_recv, sizeof(int)));
+          IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_RCVHWM, &_hwm_recv, sizeof(int)));
         }
       }
     }
@@ -278,6 +300,78 @@ namespace imagebabble {
     /** Disabled assignment operator */
     network_entity &operator = (const network_entity &);
   };
+
+  /** Poller service to query multiple network items for readability/writablility states. */
+  class poller {
+  public:
+    
+    /** Construct empty poller */
+    inline poller()
+    {}
+
+    /** Add network entity for polling. Returns identifier of item. */
+    inline size_t add(network_entity &ne)
+    {
+      socket_ptr s = ne.get_socket();
+      IB_ASSERT(s, ib_error::EINVALIDSOCKET);
+
+      size_t id = _sockets.size();
+
+      zmq::pollitem_t pi = {*s, 0, ZMQ_POLLIN | ZMQ_POLLOUT | ZMQ_POLLERR, 0};      
+      _items.push_back(pi);
+      _sockets.push_back(s);
+
+      return id;
+    }
+
+    /** Remove network entity from polling. */
+    inline void remove(size_t id)
+    {
+       IB_ASSERT(id < _sockets.size(), ib_error::EPARAMRANGE);
+       _sockets.erase(_sockets.begin() + id);
+       _items.erase(_items.begin() + id);
+    }
+
+    /** Remove all network entities */
+    inline void clear()
+    {
+      _sockets.clear();
+      _items.clear();
+    }
+
+    /** Poll using a specified timeout. If timeout is -1 waits until at least one item
+      * has an event. If timeout is 0 does not wait at all. */
+    inline void poll(int timeout_ms) 
+    {
+      IB_CATCH_ZMQ_RETHROW(zmq::poll(&_items.at(0), _items.size(), timeout_ms));      
+    }
+
+    /** Test if item is readable */
+    inline bool is_readable(size_t id) const
+    {
+      IB_ASSERT(id < _items.size(), ib_error::EPARAMRANGE);
+      return (_items[id].revents & ZMQ_POLLIN) > 0;
+    }
+
+    /** Test if item is writeable. */
+    inline bool is_writable(size_t id) const
+    {
+      IB_ASSERT(id < _items.size(), ib_error::EPARAMRANGE);
+      return (_items[id].revents & ZMQ_POLLOUT) > 0;
+    }
+
+    /** Test if item has error state. */
+    inline bool is_erroneous(size_t id) const
+    {
+      IB_ASSERT(id < _items.size(), ib_error::EPARAMRANGE);
+      return (_items[id].revents & ZMQ_POLLERR) > 0;
+    }
+
+  private:
+    std::vector<socket_ptr> _sockets;
+    std::vector<zmq::pollitem_t> _items;
+  };
+
 
   /** Base class for servers. 
     *
@@ -332,6 +426,16 @@ namespace imagebabble {
       * \throws ib_error on error.
       */
     virtual bool receive(T &t, int timeout_ms) = 0;
+
+  protected:
+
+    /** Validate talk-version. The protocol version is
+      * sent as first field in a message. */
+    void validate_version(const char *build_version, const std::string &recv_version) 
+    {
+      if (recv_version != build_version)
+        throw ib_error(ib_error::EWRONGPROTO);
+    }
   };
 
   /** Stopwatch implementation. */
@@ -407,56 +511,66 @@ namespace imagebabble {
       * 
       * \param[in] s socket to receive from
       * \param[in,out] v value to receive
+      * \param[in] flags ZMQ flags
       * \throws ib_error on error.
       */
     template<class T>
-    inline void recv(zmq::socket_t &s, T &v) 
+    inline bool recv(zmq::socket_t &s, T &v, int flags) 
     {
       zmq::message_t msg;
-      IB_ASSERT_ZMQ(s.recv(&msg));
+      IB_FIRST_PART(s.recv(&msg, flags));
       
       in_memory_buffer mb(static_cast<char*>(msg.data()), msg.size());
       std::istream is(&mb);
       is >> v;    
 
       IB_ASSERT(!is.fail(), ib_error::ECONVERSION);
+
+      return true;
     }
 
     /** Read a message(part) from the socket and discard. */
-    inline void recv(zmq::socket_t &s, drop &v) 
+    inline bool recv(zmq::socket_t &s, drop &v, int flags) 
     {
       zmq::message_t msg;
-      IB_ASSERT_ZMQ(s.recv(&msg));
+      IB_FIRST_PART(s.recv(&msg, flags));
+      return true;
     }
 
     /** Receive a string. */
-    inline void recv(zmq::socket_t &s, std::string &v) 
+    inline bool recv(zmq::socket_t &s, std::string &v, int flags) 
     {
       zmq::message_t msg;
-      IB_ASSERT_ZMQ(s.recv(&msg));
-
+      
+      IB_FIRST_PART(s.recv(&msg, flags));
+      
       v.assign(
         static_cast<char*>(msg.data()), 
         static_cast<char*>(msg.data()) + msg.size()); 
+
+      return true;
     }
 
     /** Receive a vector of elements. */
     template<class T>
-    inline void recv(zmq::socket_t &s, std::vector<T> &c)
+    inline bool recv(zmq::socket_t &s, std::vector<T> &c, int flags)
     {
       size_t count;
-      io::recv(s, count);
-     
+
+      IB_FIRST_PART(io::recv(s, count, flags));
+
       // Note, use resize to allow existing elements to be reused.
       c.resize(count);
 
       // Receive elements
       for (size_t i = 0; i < count; ++i) { 
-        io::recv(s, c[i]);
+        IB_NEXT_PART(io::recv(s, c[i], flags));        
       }
 
       // Array ends with empty element
-      io::recv(s, drop());
+      IB_NEXT_PART(io::recv(s, drop(), flags));
+
+      return true;
     }
 
     /** Test if data to be read is pending on the socket. Returns true
@@ -465,7 +579,7 @@ namespace imagebabble {
     inline bool is_data_pending(zmq::socket_t &s, int timeout_ms)
     {
       zmq::pollitem_t items[] = {{ s, 0, ZMQ_POLLIN, 0 }};      
-      IB_ASSERT_ZMQ(zmq::poll(&items[0], 1, timeout_ms) >= 0);
+      IB_CATCH_ZMQ_RETHROW(zmq::poll(&items[0], 1, timeout_ms));
       return (items[0].revents & ZMQ_POLLIN);      
     }
 
@@ -477,7 +591,7 @@ namespace imagebabble {
       * \throws ib_error on error.
       */
     template<class T>
-    inline void send(zmq::socket_t &s, const T &v, int flags = 0) 
+    inline bool send(zmq::socket_t &s, const T &v, int flags) 
     {
       std::ostringstream ostr;
       ostr << v;
@@ -490,39 +604,48 @@ namespace imagebabble {
         memcpy(msg.data(), str.c_str(), str.size());
       }
 
-      IB_ASSERT_ZMQ(s.send(msg, flags));
+      IB_FIRST_PART(s.send(msg, flags));
+      return true;
     }
 
     /** Send string. */
-    inline void send(zmq::socket_t &s, const std::string &v, int flags = 0) 
+    inline bool send(zmq::socket_t &s, const std::string &v, int flags) 
     {
       zmq::message_t msg(v.size());
       if (!v.empty()) {
         memcpy(msg.data(), v.c_str(), v.size());
       }
-      IB_ASSERT_ZMQ(s.send(msg, flags));
+      
+      IB_FIRST_PART(s.send(msg, flags));
+      return true;
     }
 
     /** Send empty message. */
-    inline void send(zmq::socket_t &s, const empty &v, int flags = 0) 
+    inline bool send(zmq::socket_t &s, const empty &v, int flags) 
     {
       zmq::message_t msg(0);
-      IB_ASSERT_ZMQ(s.send(msg, flags));
+      
+      IB_FIRST_PART(s.send(msg, flags));
+      return true;    
     }
 
     /** Send vector of elements. A vector is serialized into a multi-part message.
       * First the number of elements is sent, then each element is sent in turn.
       * Finally an empty message marks the end of vector. */
     template<class T>
-    inline void send(zmq::socket_t &s, const std::vector<T> &c, int flags = 0)
+    inline bool send(zmq::socket_t &s, const std::vector<T> &c, int flags)
     {
       const size_t nelems = c.size();
-      io::send(s, nelems, ZMQ_SNDMORE);
+
+      IB_FIRST_PART(io::send(s, nelems, flags | ZMQ_SNDMORE));
+
       for (size_t i = 0; i < nelems; ++i) {
-        io::send(s, c[i], ZMQ_SNDMORE);
+        IB_NEXT_PART(io::send(s, c[i], flags | ZMQ_SNDMORE));        
       }
       
-      io::send(s, empty(), flags);
+      IB_NEXT_PART(io::send(s, empty(), flags));
+      
+      return true;
     }
   }
 
@@ -560,7 +683,7 @@ namespace imagebabble {
         network_entity::apply_socket_options();
       }
 
-      IB_CONVERT_ERROR(_s->bind(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
     }
 
     /** Publish data to clients.
@@ -575,7 +698,7 @@ namespace imagebabble {
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
       io::send(*_s, IB_EXCHANGE_PROTO_FAST_VERSION, ZMQ_SNDMORE);
-      io::send(*_s, t);
+      io::send(*_s, t, 0);
       return true;
     }
   };
@@ -615,7 +738,14 @@ namespace imagebabble {
         network_entity::apply_socket_options();
       }
 
-      IB_CONVERT_ERROR(_s->bind(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
+    }
+
+    /** Shutdown server */
+    virtual void shutdown()
+    {
+      _clients.clear();
+      basic_server<T>::shutdown();
     }
 
     /** Publish data to clients.
@@ -631,38 +761,41 @@ namespace imagebabble {
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
 
-      typedef std::hash_set<std::string> client_set;
-
-      client_set clients;
       stopwatch sw;
 
-      bool continue_wait = true;
+      bool new_data = false;
+      const bool wait_inf = (timeout_ms == -1);
       int wait_time = timeout_ms;
 
       do {
-        bool can_read = io::is_data_pending(*_s, wait_time);
-        while(can_read) {
-          // Receive ready requestes by clients
-          std::string address;
-          io::recv(*_s, address);
-          io::recv(*_s, io::drop());
-          clients.insert(address);
-          can_read = io::is_data_pending(*_s, 0);
-        }
-        continue_wait = (timeout_ms == -1 || ((int)sw.elapsed_msecs() < timeout_ms));
-      } while ((clients.size() < min_serve) && continue_wait);
 
-      if (clients.size() >= min_serve) {
+        // Read off all available registrations
+        do {
+          new_data = receive_client_address(ZMQ_DONTWAIT);
+        } while (new_data);
+       
+        // No more data, see if we should wait for more
+        if ((_clients.size() < min_serve) && (wait_time > 0 || wait_inf)) {
+          
+          if (!wait_inf)
+            wait_time = timeout_ms - (int)sw.elapsed_msecs();
+
+          new_data = io::is_data_pending(*_s, wait_time);          
+        }
+
+      } while (new_data);
+
+
+      if (_clients.size() >= min_serve) {
         // Success, send to all clients
-        std::hash_set<std::string>::iterator i = clients.begin();
-        std::hash_set<std::string>::iterator i_end = clients.end();
+        std::unordered_set<std::string>::iterator i = _clients.begin();
+        std::unordered_set<std::string>::iterator i_end = _clients.end();
 
         for (i; i != i_end; ++i) {
-          // Construct package for client          
-          io::send(*_s, *i, ZMQ_SNDMORE);
-          io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE);
-          io::send(*_s, t);
+          send_client_payload(*i, t);          
         }
+
+        _clients.clear();
 
         return true;
       } else {
@@ -670,6 +803,31 @@ namespace imagebabble {
         return false;
       }      
     }
+  private:
+    typedef std::unordered_set<std::string> client_set;    
+
+    /** Try to receive client ready flag */
+    bool receive_client_address(int flags) {
+      std::string address;
+      
+      IB_FIRST_PART(io::recv(*_s, address, flags));
+      IB_NEXT_PART(io::recv(*_s, io::drop(), flags));
+
+      _clients.insert(address);
+      return true;
+    }
+
+    /** Send payload to client */
+    bool send_client_payload(const std::string &addr, const T &t)
+    {
+      IB_FIRST_PART(io::send(*_s, addr, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*_s, t, 0));
+
+      return true;
+    }
+
+    client_set _clients;     
   };
 
   /** Fast client implementation. */
@@ -680,6 +838,7 @@ namespace imagebabble {
     /** Default constructor */
     fast_client()
       : basic_client<T>(context_ptr(new zmq::context_t(1)))
+      , _recv_skip(0)
     {}
 
     virtual ~fast_client()
@@ -697,10 +856,10 @@ namespace imagebabble {
         _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
       
         network_entity::apply_socket_options();
-        IB_CONVERT_ERROR(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
+        IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
       }
 
-      IB_CONVERT_ERROR(_s->connect(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
     }
 
     /** Receive data.
@@ -719,21 +878,30 @@ namespace imagebabble {
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
 
+      const bool has_wait = (timeout_ms != 0);
+
       try {
-        if (!io::is_data_pending(*_s, timeout_ms)) {
+
+        int k = _recv_skip;
+
+        bool has_data = false;
+        while (k >= 0 && receive_message(t, ZMQ_DONTWAIT)) {
+          --k;
+        }
+
+        // Received at least one message from queue.
+        if (k != _recv_skip) {
+          return true;
+        }
+
+        // We haven't received anything. See if waiting is ok.
+        if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
+          receive_message(t, 0);
+          return true;
+        } else {
           return false;
         }
 
-        // Check for correct version
-        std::string version;
-        io::recv(*_s, version);
-        if (version != IB_EXCHANGE_PROTO_FAST_VERSION)
-          throw ib_error(ib_error::EWRONGPROTO);
-
-        // Receive payload
-        io::recv(*_s, t);
-        
-        return true;
       } catch (ib_error &e) {
         // clean up
         io::discard_remainder(*_s);
@@ -742,6 +910,28 @@ namespace imagebabble {
 
     }
 
+    /** Set the maximum number of elements in queue to skip. */
+    void set_receive_skip(int elems)
+    {
+      _recv_skip = elems;
+    }
+
+  private:
+
+    /** Receive complete message once */
+    bool receive_message(T &t, int flags)
+    {
+      std::string version;
+
+      IB_FIRST_PART(io::recv(*_s, version, flags));
+      IB_NEXT_PART(io::recv(*_s, t, flags));
+
+      basic_client<T>::validate_version(IB_EXCHANGE_PROTO_FAST_VERSION, version);
+
+      return true;
+    }
+
+    int _recv_skip;
   };
 
   /** Reliable client implementation. */
@@ -771,7 +961,7 @@ namespace imagebabble {
         network_entity::apply_socket_options();
       }
 
-      IB_CONVERT_ERROR(_s->connect(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
     }
 
     /** Receive data.
@@ -788,26 +978,32 @@ namespace imagebabble {
 
       try {
         // Send ready
-        io::send(*_s, io::empty());
+        IB_FIRST_PART(io::send(*_s, io::empty(), 0));
 
         // Wait for reply
         if (!io::is_data_pending(*_s, timeout_ms)) {
           return false;
         }
 
-        std::string version;
-        io::recv(*_s, version);
-        if (version != IB_EXCHANGE_PROTO_RELIABLE_VERSION)
-          throw ib_error(ib_error::EWRONGPROTO);
-        
-        // Data is here, return
-        io::recv(*_s, t);
-
-        return true;
+        return receive_message(t, 0);
       } catch (const ib_error &e) {
         io::discard_remainder(*_s);
         throw e;
       }
+    }
+  private:
+    
+    /** Receive complete message once */
+    bool receive_message(T &t, int flags)
+    {
+      std::string version;
+
+      IB_FIRST_PART(io::recv(*_s, version, flags));
+      IB_NEXT_PART(io::recv(*_s, t, flags));
+
+      basic_client<T>::validate_version(IB_EXCHANGE_PROTO_RELIABLE_VERSION, version);
+
+      return true;
     }
   };
 

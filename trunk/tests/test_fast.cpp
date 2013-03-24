@@ -69,7 +69,7 @@ void client_fnc(int &count)
     }
   }
 
-  ib::io::send(ctrl, ib::io::empty());
+  ib::io::send(ctrl, ib::io::empty(), 0);
 
   c.shutdown();
 }
