@@ -1,4 +1,4 @@
-/*! \file test_fast.cpp
+/*! \file test_poller.cpp
 
     Copyright (c) 2013, PROFACTOR GmbH, Christoph Heindl
     All rights reserved.
@@ -31,70 +31,100 @@
 #include <imagebabble/imagebabble.hpp>
 #include <boost/thread.hpp>
 
-BOOST_AUTO_TEST_SUITE(test_fast)
+BOOST_AUTO_TEST_SUITE(test_poller)
 
 namespace ib = imagebabble;
 
-void server_fnc(int &count) 
+void server_fnc(int times, size_t nclients, int timeout, int &count) 
 {
-  ib::fast_server<int> s;
+  ib::reliable_server<int> s;
   s.startup();
 
-  zmq::socket_t ctrl(*s.get_context(), ZMQ_REP);
-  ctrl.connect("tcp://127.0.0.1:6001");
-  
-  boost::this_thread::sleep(boost::posix_time::seconds(1));
-
   count = 0;
-  while (!ib::io::is_data_pending(ctrl, 0)) {
-    if (s.publish(1)) {
+  for (int i = 0; i < times; ++i) {
+    if (s.publish(1, timeout, nclients)) {
       count += 1;
     }
   }
-  ib::io::recv(ctrl, ib::io::drop(), 0);
-
   s.shutdown();
 }
 
-void client_fnc(int &count)
+void client_fnc_any(int timeout, bool &success)
 {
-  ib::fast_client<int> c;  
-  c.startup();
+  success = false;
 
-  zmq::socket_t ctrl(*c.get_context(), ZMQ_REQ);
-  int linger = 0;
-  ctrl.setsockopt(ZMQ_LINGER, &linger, sizeof(int));
-  ctrl.bind("tcp://127.0.0.1:6001");
+  ib::reliable_client<int> c[2];
+  c[0].startup();
+  c[1].startup();
 
-  boost::this_thread::sleep(boost::posix_time::seconds(1));
+  ib::poller poller;
+  poller.add(c[0]);
+  poller.add(c[1]); 
 
+  if (!poller.poll_any(timeout, ZMQ_POLLIN))
+    return;
+  
   int j;
-  count = 0;
-  while (count < 10) {
-    if (c.receive(j, -1)) {
-      count += 1;
-    }
+  if (poller.is_readable(0)) {
+    c[0].receive(j, 0);
+    success = true;
   }
 
-  ib::io::send(ctrl, ib::io::empty(), 0);
+  if (poller.is_readable(1)) {
+    c[1].receive(j, 0);
+    success = true;
+  }
 
-  c.shutdown();
+  // Server only sends 1 packet.
+  success &= !poller.poll_any(timeout, ZMQ_POLLIN);
 }
 
-
-BOOST_AUTO_TEST_CASE(single_client)
+void client_fnc_all(int timeout, bool &success)
 {
-  int sum_sent = 0;
-  int sum_received = 0;
+  success = false;
+
+  ib::reliable_client<int> c[2];
+  c[0].startup();
+  c[1].startup();
+
+  ib::poller poller;
+  poller.add(c[0]);
+  poller.add(c[1]); 
+
+  if (!poller.poll_all(timeout, ZMQ_POLLIN))
+    return;
+
+  success = poller.is_readable(0) && poller.is_readable(1);
+}
+
+BOOST_AUTO_TEST_CASE(poll_any)
+{
+  
+  int sum_sent;
+  bool success;
 
   boost::thread_group g;
 
-  g.create_thread(boost::bind(server_fnc, boost::ref(sum_sent)));
-  g.create_thread(boost::bind(client_fnc, boost::ref(sum_received)));
+  g.create_thread(boost::bind(server_fnc, 1, 1, -1, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_fnc_any, 1000, boost::ref(success)));
   g.join_all();
 
-  BOOST_REQUIRE_LE(10, sum_sent);
-  BOOST_REQUIRE_EQUAL(10, sum_received);  
+  BOOST_REQUIRE(sum_sent > 0 && success);
+}
+
+BOOST_AUTO_TEST_CASE(poll_all)
+{
+  
+  int sum_sent;
+  bool success;
+
+  boost::thread_group g;
+
+  g.create_thread(boost::bind(server_fnc, 1, 2, -1, boost::ref(sum_sent)));
+  g.create_thread(boost::bind(client_fnc_all, 1000, boost::ref(success)));
+  g.join_all();
+
+  BOOST_REQUIRE(sum_sent > 0 && success);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

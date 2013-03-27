@@ -301,6 +301,33 @@ namespace imagebabble {
     network_entity &operator = (const network_entity &);
   };
 
+  /** Stopwatch implementation. */
+  class stopwatch {
+  public:
+
+    /** Start stopwatch */
+    inline stopwatch()
+      : _handle(zmq_stopwatch_start()), _elapsed(0)
+    {}
+
+    /** Destroy stopwatch */
+    inline ~stopwatch()
+    {
+      zmq_stopwatch_stop(_handle);
+    }
+
+    /** Get elapsed time since construction in milli-seconds */
+    inline unsigned long elapsed_msecs() {
+      _elapsed += zmq_stopwatch_stop(_handle);      
+      _handle = zmq_stopwatch_start();      
+      return _elapsed / 1000;
+    }
+
+  private:
+    void *_handle;    
+    unsigned long _elapsed;
+  };
+
   /** Poller service to query multiple network items for readability/writablility states. */
   class poller {
   public:
@@ -341,9 +368,44 @@ namespace imagebabble {
 
     /** Poll using a specified timeout. If timeout is -1 waits until at least one item
       * has an event. If timeout is 0 does not wait at all. */
-    inline void poll(int timeout_ms) 
+    inline bool poll_any(int timeout_ms, short events = ZMQ_POLLIN) 
     {
-      IB_CATCH_ZMQ_RETHROW(zmq::poll(&_items.at(0), _items.size(), timeout_ms));      
+      apply_events(events);
+
+      int n;
+      IB_CATCH_ZMQ_RETHROW((n = zmq::poll(&_items.at(0), _items.size(), timeout_ms)));
+      return n > 0;
+    }
+
+    /** Poll using a specified timeout. If timeout is -1 waits until at all items
+      * have an event. If timeout is 0 does not wait at all. */
+    inline bool poll_all(int timeout_ms, short events = ZMQ_POLLIN) 
+    {
+      apply_events(events);
+
+      stopwatch sw;
+      const bool wait_inf = (timeout_ms == -1);
+      int wait_time = timeout_ms;
+      
+      bool all_events = true;
+      do {
+        IB_CATCH_ZMQ_RETHROW(zmq::poll(&_items.at(0), _items.size(), wait_time));
+
+        // Check if all items have events
+        all_events = true;
+        for (size_t i = 0; i < _items.size(); ++i) {
+          if (_items[i].revents == 0) {
+            all_events = false;
+            break;
+          }
+        }
+
+        if (!wait_inf)
+            wait_time = timeout_ms - (int)sw.elapsed_msecs();
+
+      } while (!all_events && (wait_inf || wait_time > 0));
+
+      return all_events;
     }
 
     /** Test if item is readable */
@@ -368,6 +430,14 @@ namespace imagebabble {
     }
 
   private:
+
+    /** Apply event flags for polling */
+    void apply_events(short events) {
+      for (size_t i = 0; i < _items.size(); ++i) {
+        _items[i].events = events;        
+      }
+    }
+
     std::vector<socket_ptr> _sockets;
     std::vector<zmq::pollitem_t> _items;
   };
@@ -438,33 +508,6 @@ namespace imagebabble {
     }
   };
 
-  /** Stopwatch implementation. */
-  class stopwatch {
-  public:
-
-    /** Start stopwatch */
-    inline stopwatch()
-      : _handle(zmq_stopwatch_start()), _elapsed(0)
-    {}
-
-    /** Destroy stopwatch */
-    inline ~stopwatch()
-    {
-      zmq_stopwatch_stop(_handle);
-    }
-
-    /** Get elapsed time since construction in milli-seconds */
-    inline unsigned long elapsed_msecs() {
-      _elapsed += zmq_stopwatch_stop(_handle);      
-      _handle = zmq_stopwatch_start();      
-      return _elapsed / 1000;
-    }
-
-  private:
-    void *_handle;    
-    unsigned long _elapsed;
-  };
-
   /** Send and receive functions for data types. */
   namespace io {
     
@@ -504,6 +547,27 @@ namespace imagebabble {
         }
       } catch (const zmq::error_t &) {}
     }
+  
+    /** Ensure clean-up of partial messages when an error occurs
+      * in the middle of such messages. */
+    class ensure_cleanup_partial_messages {
+    public:
+
+      /** Initialize from entity */
+      ensure_cleanup_partial_messages(socket_ptr s)
+        :_s(s)
+      {
+        IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+      }
+
+      /** Cleanup on destruction */
+      ~ensure_cleanup_partial_messages() {
+        io::discard_remainder(*_s);
+      }
+
+    private:
+      socket_ptr _s;      
+    };
 
     /** Generic receive method. Tries to receive a value of T from the given socket.
       * T must have locatable extraction semantics. This method will block until
@@ -882,34 +946,28 @@ namespace imagebabble {
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
 
+      io::ensure_cleanup_partial_messages ecpm(this->get_socket());
+
       const bool has_wait = (timeout_ms != 0);
-
-      try {
-
-        int k = _enable_skip ? _recv_skip : 0;
+      const int max_skip = _enable_skip ? _recv_skip : 0;
+      int k = max_skip;
        
-        bool has_data = false;
-        while (k >= 0 && receive_message(t, ZMQ_DONTWAIT)) {
-          --k;
-        }
+      bool has_data = false;
+      while (k >= 0 && receive_message(t, ZMQ_DONTWAIT)) {
+        --k;
+      }
 
-        // Received at least one message from queue.
-        if (k != _recv_skip) {
+      // Received at least one message from queue.
+      if (k != max_skip) {
           return true;
-        }
+      }
 
-        // We haven't received anything. See if waiting is ok.
-        if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
-          receive_message(t, 0);
-          return true;
-        } else {
-          return false;
-        }
-
-      } catch (ib_error &e) {
-        // clean up
-        io::discard_remainder(*_s);
-        throw e;
+      // We haven't received anything. See if waiting is ok.
+      if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
+        receive_message(t, 0);
+        return true;
+      } else {
+        return false;
       }
 
     }
@@ -930,9 +988,8 @@ namespace imagebabble {
       std::string version;
 
       IB_FIRST_PART(io::recv(*_s, version, flags));
-      IB_NEXT_PART(io::recv(*_s, t, flags));
-
       basic_client<T>::validate_version(IB_EXCHANGE_PROTO_FAST_VERSION, version);
+      IB_NEXT_PART(io::recv(*_s, t, flags));
 
       return true;
     }
@@ -969,6 +1026,7 @@ namespace imagebabble {
       }
 
       IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
+      this->send_ready();
     }
 
     /** Receive data.
@@ -983,22 +1041,46 @@ namespace imagebabble {
     {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
 
-      try {
-        // Send ready
-        IB_FIRST_PART(io::send(*_s, io::empty(), 0));
+      io::ensure_cleanup_partial_messages ecpm(this->get_socket());      
+      ensure_send_ready sr(this);
 
-        // Wait for reply
-        if (!io::is_data_pending(*_s, timeout_ms)) {
-          return false;
-        }
+      const bool has_wait = (timeout_ms != 0);
 
-        return receive_message(t, 0);
-      } catch (const ib_error &e) {
-        io::discard_remainder(*_s);
-        throw e;
+      // Try to receive without waiting.
+      if (receive_message(t, ZMQ_DONTWAIT)) {
+        return true;
+      }
+
+      // We haven't received anything. See if waiting is ok.
+      if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
+        receive_message(t, 0);
+        return true;
+      } else {
+        return false;
       }
     }
+
   private:
+
+    bool send_ready() {
+      // Send ready
+      IB_FIRST_PART(io::send(*_s, io::empty(), 0));
+      return true;
+    }
+
+    /** Sends ready to server on scope exit */
+    class ensure_send_ready {
+    public:
+      ensure_send_ready(reliable_client *rc)
+        :_rc(rc)
+      {}
+
+      ~ensure_send_ready() {
+        _rc->send_ready();
+      }
+    private:
+      reliable_client *_rc;
+    };
     
     /** Receive complete message once */
     bool receive_message(T &t, int flags)
@@ -1006,10 +1088,8 @@ namespace imagebabble {
       std::string version;
 
       IB_FIRST_PART(io::recv(*_s, version, flags));
-      IB_NEXT_PART(io::recv(*_s, t, flags));
-
       basic_client<T>::validate_version(IB_EXCHANGE_PROTO_RELIABLE_VERSION, version);
-
+      IB_NEXT_PART(io::recv(*_s, t, flags));
       return true;
     }
   };
