@@ -838,7 +838,7 @@ namespace imagebabble {
     /** Default constructor */
     fast_client()
       : basic_client<T>(context_ptr(new zmq::context_t(1)))
-      , _recv_skip(0)
+      , _enable_skip(false), _recv_skip(0)
     {}
 
     virtual ~fast_client()
@@ -857,6 +857,10 @@ namespace imagebabble {
       
         network_entity::apply_socket_options();
         IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
+
+        size_t recvhwm_size = sizeof (_recv_skip);
+        IB_CATCH_ZMQ_RETHROW(_s->getsockopt(ZMQ_RCVHWM, &_recv_skip, &recvhwm_size));
+
       }
 
       IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
@@ -882,8 +886,8 @@ namespace imagebabble {
 
       try {
 
-        int k = _recv_skip;
-
+        int k = _enable_skip ? _recv_skip : 0;
+       
         bool has_data = false;
         while (k >= 0 && receive_message(t, ZMQ_DONTWAIT)) {
           --k;
@@ -910,10 +914,12 @@ namespace imagebabble {
 
     }
 
-    /** Set the maximum number of elements in queue to skip. */
-    void set_receive_skip(int elems)
+    /** Enable skipping older elements in receive queue. Enabling
+      * this property will allow the client to discard old messages
+      * in its receive queue and forward to the most recent one. */
+    void set_enable_most_recent(bool enable)
     {
-      _recv_skip = elems;
+      _enable_skip = enable;
     }
 
   private:
@@ -931,6 +937,7 @@ namespace imagebabble {
       return true;
     }
 
+    bool _enable_skip;
     int _recv_skip;
   };
 
