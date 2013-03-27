@@ -12,7 +12,6 @@
 /** [Include Statement] */
 
 #include <opencv2/opencv.hpp>
-#include <iostream>
 
 /** [Namespace Abbrevation] */
 namespace ib = ::imagebabble;
@@ -24,14 +23,13 @@ int main(int argc, char *argv[])
   // Start server
   ib::fast_server< ib::image > is;
   is.set_max_pending_outbound(100);
-  is.startup("tcp://*:6000");
+  is.startup("tcp://127.0.0.1:6000");
    
   // Open video device
   cv::VideoCapture vc(0);
   cv::Mat cv_img;
    
   // While more images are available ...
-  int count = 0;
   while (vc.grab() && vc.retrieve(cv_img)) 
   {
     // Convert image
