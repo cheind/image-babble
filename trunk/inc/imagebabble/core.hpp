@@ -487,6 +487,9 @@ namespace imagebabble {
       : network_entity(c)
     {} 
 
+    /** Send request for next message. */
+    virtual bool send_request() = 0;
+
     /** Receive data. 
       *
       * \param [in,out] t data to be received
@@ -930,6 +933,12 @@ namespace imagebabble {
       IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
     }
 
+    /** Send request for next image. No-op operation */
+    virtual bool send_request()
+    {
+      return true;
+    }
+
     /** Receive data.
       *
       * \warning You should not rely on receiving a single specific data element 
@@ -1017,7 +1026,7 @@ namespace imagebabble {
       * \param [in] addr endpoint address
       * \throws ib_error on error 
       */
-    inline void startup(const std::string &addr = "tcp://127.0.0.1:6000")
+    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
 
       if (!_s) {
@@ -1026,7 +1035,12 @@ namespace imagebabble {
       }
 
       IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
-      this->send_ready();
+    }
+
+    /** Send request for next image */
+    virtual bool send_request() {
+      IB_FIRST_PART(io::send(*_s, io::empty(), ZMQ_DONTWAIT));
+      return true;
     }
 
     /** Receive data.
@@ -1042,7 +1056,6 @@ namespace imagebabble {
       IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
 
       io::ensure_cleanup_partial_messages ecpm(this->get_socket());      
-      ensure_send_ready sr(this);
 
       const bool has_wait = (timeout_ms != 0);
 
@@ -1061,26 +1074,6 @@ namespace imagebabble {
     }
 
   private:
-
-    bool send_ready() {
-      // Send ready
-      IB_FIRST_PART(io::send(*_s, io::empty(), 0));
-      return true;
-    }
-
-    /** Sends ready to server on scope exit */
-    class ensure_send_ready {
-    public:
-      ensure_send_ready(reliable_client *rc)
-        :_rc(rc)
-      {}
-
-      ~ensure_send_ready() {
-        _rc->send_ready();
-      }
-    private:
-      reliable_client *_rc;
-    };
     
     /** Receive complete message once */
     bool receive_message(T &t, int flags)

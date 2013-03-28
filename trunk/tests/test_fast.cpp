@@ -71,6 +71,7 @@ void client_fnc(int &count)
   int j;
   count = 0;
   while (count < 10) {
+    c.send_request();
     if (c.receive(j, -1)) {
       count += 1;
     }

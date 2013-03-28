@@ -61,6 +61,9 @@ void client_fnc_any(int timeout, bool &success)
   poller.add(c[0]);
   poller.add(c[1]); 
 
+  c[0].send_request();
+  c[1].send_request();
+
   if (!poller.poll_any(timeout, ZMQ_POLLIN))
     return;
   
@@ -90,6 +93,9 @@ void client_fnc_all(int timeout, bool &success)
   ib::poller poller;
   poller.add(c[0]);
   poller.add(c[1]); 
+
+  c[0].send_request();
+  c[1].send_request();
 
   if (!poller.poll_all(timeout, ZMQ_POLLIN))
     return;

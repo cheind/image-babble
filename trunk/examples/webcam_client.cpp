@@ -23,7 +23,8 @@ int main(int argc, char *argv[])
 
   // Try to receive image with timeout
   ib::image ib_image;
-  while (ic.receive(ib_image, 3000)) {
+  ic.send_request();
+  while (ic.receive(ib_image, 5000)) {
 
     // Convert image
     cv::Mat cv_img;
@@ -33,6 +34,7 @@ int main(int argc, char *argv[])
     cv::imshow("image", cv_img);
     cv::waitKey(10);
 
+    ic.send_request();
   }
   
   return 0;

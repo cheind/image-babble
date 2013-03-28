@@ -60,8 +60,10 @@ void client_fnc(int timeout, int &count)
   int j = -1;
 
   count = 0;
+  c.send_request();
   while (c.receive(j, timeout) && j >= 0) {
     count += j;
+    c.send_request();
   }
 
   c.shutdown();
@@ -74,13 +76,17 @@ void client_disconnect_fnc(int &count)
   count = 0;
   int j;
   c.startup();
+  c.send_request();
   if (c.receive(j) && j > 0) {
     count += j; 
+    c.send_request();
   }
   c.shutdown();
 
   c.startup();
+  c.send_request();
   if (c.receive(j) && j > 0) {
+    c.send_request();
     count += j;
   }
   c.shutdown();
@@ -93,6 +99,7 @@ void client_once_fnc(int &count)
   count = 0;
   int j;
   c.startup();
+  c.send_request();
   c.receive(j); count += j;
   c.shutdown();
 }
@@ -172,7 +179,8 @@ BOOST_AUTO_TEST_CASE(missing_client)
   g.create_thread(boost::bind(client_once_fnc, boost::ref(sum_received[1])));
   g.join_all();
 
-  BOOST_REQUIRE(sum_sent == 2 && sum_received[0] == 2 && sum_received[1] == 1);  
+
+  BOOST_REQUIRE(sum_sent == 1 && sum_received[0] == 1 && sum_received[1] == 1);  
 }
 
 BOOST_AUTO_TEST_CASE(missing_server)
