@@ -210,8 +210,7 @@ void client_image_fnc()
 {
   ib::reliable_client< ib::image > c;
   c.startup();
-  c.send_request();
-
+  
   ib::image img;
   BOOST_REQUIRE(c.receive(img));
   BOOST_REQUIRE_EQUAL(1, img.get_width());
@@ -261,8 +260,7 @@ void client_image_group_fnc()
 {
   ib::reliable_client< ib::image_group > c;
   c.startup();
-  c.send_request();
-
+  
   ib::image_group g;
   BOOST_REQUIRE(c.receive(g));
   BOOST_REQUIRE_EQUAL(std::string("my frame"), g.get_id());
@@ -327,7 +325,6 @@ void client_image_group_many_fnc()
 
   bool cont = true;
   do {
-    c.send_request();
     BOOST_REQUIRE(c.receive(g));
     cont = (g.get_id() == "content");
 
@@ -370,7 +367,6 @@ void client_image_group_preexisting_fnc()
 {
   ib::reliable_client< ib::image_group > c;
   c.startup();
-  c.send_request();
 
   int arr[5];
 

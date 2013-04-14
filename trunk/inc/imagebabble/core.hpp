@@ -45,7 +45,7 @@
 /** The version identification for fast protocol.  */
 #define IB_EXCHANGE_PROTO_FAST_VERSION "f001"    
 /** The version identification for reliable protocol.  */
-#define IB_EXCHANGE_PROTO_RELIABLE_VERSION "r001"
+#define IB_EXCHANGE_PROTO_RELIABLE_VERSION "r002"
 
 /** Assert expression or throw imagebabble::ib_error */
 #define IB_ASSERT(expr, reason)               \
@@ -286,6 +286,14 @@ namespace imagebabble {
         }
       }
     }
+      
+    /** Validate talk-version. The protocol version is
+      * sent as first field in a message. */
+    void validate_version(const char *build_version, const std::string &recv_version) 
+    {
+      if (recv_version != build_version)
+        throw ib_error(ib_error::EWRONGPROTO);
+    }
 
 
     context_ptr _ctx; ///< ZMQ context
@@ -326,6 +334,33 @@ namespace imagebabble {
   private:
     void *_handle;    
     unsigned long _elapsed;
+  };
+
+  /** Helper class to calculate elapsed times and timeouts */
+  class timeout {
+  public:
+    /** Initialize with timeout. Timeout can be positive or -1 to indicate infinite timeout. */
+    inline timeout(int timeout_msec)
+      : _timeout_msec(timeout_msec)
+    {}
+
+    /** Calculate the number of milliseconds left for waiting. */
+    inline int timeleft() const {
+      if (_timeout_msec == -1) {
+        return -1;
+      } else {
+        return std::max<int>(_timeout_msec - (int)_sw.elapsed_msecs(), 0);
+      }
+    }
+
+    /** Test if there is any more time left */
+    static inline bool is_timeleft(int timeleft) {
+      return timeleft == -1 || timeleft > 0;
+    }
+
+  private:
+    int _timeout_msec;
+    mutable stopwatch _sw;
   };
 
   /** Poller service to query multiple network items for readability/writablility states. */
@@ -428,7 +463,6 @@ namespace imagebabble {
       IB_ASSERT(id < _items.size(), ib_error::EPARAMRANGE);
       return (_items[id].revents & ZMQ_POLLERR) > 0;
     }
-
   private:
 
     /** Apply event flags for polling */
@@ -487,9 +521,6 @@ namespace imagebabble {
       : network_entity(c)
     {} 
 
-    /** Send request for next message. */
-    virtual bool send_request() = 0;
-
     /** Receive data. 
       *
       * \param [in,out] t data to be received
@@ -499,16 +530,6 @@ namespace imagebabble {
       * \throws ib_error on error.
       */
     virtual bool receive(T &t, int timeout_ms) = 0;
-
-  protected:
-
-    /** Validate talk-version. The protocol version is
-      * sent as first field in a message. */
-    void validate_version(const char *build_version, const std::string &recv_version) 
-    {
-      if (recv_version != build_version)
-        throw ib_error(ib_error::EWRONGPROTO);
-    }
   };
 
   /** Send and receive functions for data types. */
@@ -715,378 +736,6 @@ namespace imagebabble {
       return true;
     }
   }
-
-  /** Fast but unreliable server implementation. The fast server implementation is based
-    * on a publisher/subscriber pattern to fan out data to all connected clients. It
-    * avoids back-chatter which improves throughput. The basic guarantees for clients 
-    * are that they either receive the complete data published or no data at all.
-    *
-    * The server will drop messages when no clients are connected. Messages for clients
-    * in exceptional states are dropped as well. Expect to lose data when using the 
-    * fast server.*/
-  template<typename T>
-  class fast_server : public basic_server<T> {
-  public:
-
-    /** Default constructor. */
-    fast_server()
-      : basic_server<T>(context_ptr(new zmq::context_t(1)))
-    {}
-
-    /** Destructor. */
-    virtual ~fast_server()
-    {}
-
-    /** Start a new connection on the given endpoint. This method can be called
-      * multiple times to publish the same data on multiple endpoints.
-      *
-      * \param[in] addr address to bind server to.
-      * \throws ib_error on error.
-      */
-    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
-    { 
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
-        network_entity::apply_socket_options();
-      }
-
-      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
-    }
-
-    /** Publish data to clients.
-      * 
-      * \param[in] t data to be published.
-      * \param[in] timeout_ms unused. Method returns always immediately.
-      * \param[in] min_serve unused.
-      * \returns true if data was published successfully.
-      * \returns false never.
-      **/
-    virtual bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
-    {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
-      io::send(*_s, IB_EXCHANGE_PROTO_FAST_VERSION, ZMQ_SNDMORE);
-      io::send(*_s, t, 0);
-      return true;
-    }
-  };
-
-  /** Reliable server implementation. The reliable server implementation is based
-    * on a request/reply pattern send data to a set of connected clients. It is reliable
-    * in the term that no data is lost due to filled queues on both ends.
-    * 
-    * When new data is to be published, it waits for the requested number of clients 
-    * to report readiness. If at least the specified number of clients gets ready in 
-    * the specified timeout interval, the data is sent to all clients. If not, no data 
-    * at all is sent.
-    */
-  template<typename T>
-  class reliable_server : public basic_server<T> {
-  public:
-
-    /** Default constructor. */
-    reliable_server()
-      : basic_server<T>(context_ptr(new zmq::context_t(1)))
-    {}
-
-    /** Destructor. */
-    virtual ~reliable_server()
-    {}
-
-    /** Start a new connection on the given endpoint. This method can be called
-      * multiple times to publish the same data on multiple endpoints.
-      *
-      * \param[in] addr address to bind to.
-      * \throws ib_error on error
-      */
-    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
-    {  
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
-        network_entity::apply_socket_options();
-      }
-
-      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
-    }
-
-    /** Shutdown server */
-    virtual void shutdown()
-    {
-      _clients.clear();
-      basic_server<T>::shutdown();
-    }
-
-    /** Publish data to clients.
-      * 
-      * \param [in] t data to be published.
-      * \param [in] min_serve minimum number of clients to serve before returning.
-      * \param [in] timeout_ms maximum wait time in milliseconds for clients to get ready.
-      * \returns true when data was published successfully
-      * \returns false when a send timeout occurred.
-      * \throws ib_error on error.
-      **/
-    virtual bool publish(const T &t, int timeout_ms = -1, size_t min_serve = 1)
-    {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
-
-      stopwatch sw;
-
-      bool new_data = false;
-      const bool wait_inf = (timeout_ms == -1);
-      int wait_time = timeout_ms;
-
-      do {
-
-        // Read off all available registrations
-        do {
-          new_data = receive_client_address(ZMQ_DONTWAIT);
-        } while (new_data);
-       
-        // No more data, see if we should wait for more
-        if ((_clients.size() < min_serve) && (wait_time > 0 || wait_inf)) {
-          
-          if (!wait_inf)
-            wait_time = timeout_ms - (int)sw.elapsed_msecs();
-
-          new_data = io::is_data_pending(*_s, wait_time);          
-        }
-
-      } while (new_data);
-
-
-      if (_clients.size() >= min_serve) {
-        // Success, send to all clients
-        std::unordered_set<std::string>::iterator i = _clients.begin();
-        std::unordered_set<std::string>::iterator i_end = _clients.end();
-
-        for (i; i != i_end; ++i) {
-          send_client_payload(*i, t);          
-        }
-
-        _clients.clear();
-
-        return true;
-      } else {
-        // Not enough clients within given timeout        
-        return false;
-      }      
-    }
-  private:
-    typedef std::unordered_set<std::string> client_set;    
-
-    /** Try to receive client ready flag */
-    bool receive_client_address(int flags) {
-      std::string address;
-      
-      IB_FIRST_PART(io::recv(*_s, address, flags));
-      IB_NEXT_PART(io::recv(*_s, io::drop(), flags));
-
-      _clients.insert(address);
-      return true;
-    }
-
-    /** Send payload to client */
-    bool send_client_payload(const std::string &addr, const T &t)
-    {
-      IB_FIRST_PART(io::send(*_s, addr, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, t, 0));
-
-      return true;
-    }
-
-    client_set _clients;     
-  };
-
-  /** Fast client implementation. */
-  template<typename T>
-  class fast_client : public basic_client<T> {
-  public:
-
-    /** Default constructor */
-    fast_client()
-      : basic_client<T>(context_ptr(new zmq::context_t(1)))
-      , _enable_skip(false), _recv_skip(0)
-    {}
-
-    virtual ~fast_client()
-    {}
-
-    /** Start a new connection to the given endpoint. If called multiple times, the client
-      * will connect to more endpoints. 
-      *
-      * \param [in] addr endpoint address to connect to
-      * \throws ib_error on error
-      */      
-    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
-    {
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
-      
-        network_entity::apply_socket_options();
-        IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
-
-        size_t recvhwm_size = sizeof (_recv_skip);
-        IB_CATCH_ZMQ_RETHROW(_s->getsockopt(ZMQ_RCVHWM, &_recv_skip, &recvhwm_size));
-
-      }
-
-      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
-    }
-
-    /** Send request for next image. No-op operation */
-    virtual bool send_request()
-    {
-      return true;
-    }
-
-    /** Receive data.
-      *
-      * \warning You should not rely on receiving a single specific data element 
-      *          with the fast_client and fast_server implementation. Expect data to get lost.
-      *
-      * \param [in,out] t data to be received
-      * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
-      *             Timeout is set to 1 second by default.
-      * \returns true if data was received successfully.
-      * \returns false when receive timeout occurred.
-      * \throws ib_error on error
-      */
-    virtual bool receive(T &t, int timeout_ms = 1000)
-    {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
-
-      io::ensure_cleanup_partial_messages ecpm(this->get_socket());
-
-      const bool has_wait = (timeout_ms != 0);
-      const int max_skip = _enable_skip ? _recv_skip : 0;
-      int k = max_skip;
-       
-      bool has_data = false;
-      while (k >= 0 && receive_message(t, ZMQ_DONTWAIT)) {
-        --k;
-      }
-
-      // Received at least one message from queue.
-      if (k != max_skip) {
-          return true;
-      }
-
-      // We haven't received anything. See if waiting is ok.
-      if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
-        receive_message(t, 0);
-        return true;
-      } else {
-        return false;
-      }
-
-    }
-
-    /** Enable skipping older elements in receive queue. Enabling
-      * this property will allow the client to discard old messages
-      * in its receive queue and forward to the most recent one. */
-    void set_enable_most_recent(bool enable)
-    {
-      _enable_skip = enable;
-    }
-
-  private:
-
-    /** Receive complete message once */
-    bool receive_message(T &t, int flags)
-    {
-      std::string version;
-
-      IB_FIRST_PART(io::recv(*_s, version, flags));
-      basic_client<T>::validate_version(IB_EXCHANGE_PROTO_FAST_VERSION, version);
-      IB_NEXT_PART(io::recv(*_s, t, flags));
-
-      return true;
-    }
-
-    bool _enable_skip;
-    int _recv_skip;
-  };
-
-  /** Reliable client implementation. */
-  template<typename T>
-  class reliable_client : public basic_client<T> {
-  public:
-
-    /** Default constructor */
-    reliable_client()
-      : basic_client<T>(context_ptr(new zmq::context_t(1)))
-    {}
-
-    virtual ~reliable_client()
-    {}
-
-    /** Start a new connection to the given endpoint. If called multiple times, 
-      * the client will connect to more endpoints. 
-      *
-      * \param [in] addr endpoint address
-      * \throws ib_error on error 
-      */
-    virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
-    {
-
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
-        network_entity::apply_socket_options();
-      }
-
-      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
-    }
-
-    /** Send request for next image */
-    virtual bool send_request() {
-      IB_FIRST_PART(io::send(*_s, io::empty(), ZMQ_DONTWAIT));
-      return true;
-    }
-
-    /** Receive data.
-      *
-      * \param [in,out] t data to be received
-      * \param [in] timeout_ms Maximum wait time in milliseconds to receive data.
-      *             Waits forever by default.
-      * \returns true if data was received successfully
-      * \returns false if receive timeout occurred
-      * \throws ib_error on error */
-    virtual bool receive(T &t, int timeout_ms = -1) 
-    {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
-
-      io::ensure_cleanup_partial_messages ecpm(this->get_socket());      
-
-      const bool has_wait = (timeout_ms != 0);
-
-      // Try to receive without waiting.
-      if (receive_message(t, ZMQ_DONTWAIT)) {
-        return true;
-      }
-
-      // We haven't received anything. See if waiting is ok.
-      if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
-        receive_message(t, 0);
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-  private:
-    
-    /** Receive complete message once */
-    bool receive_message(T &t, int flags)
-    {
-      std::string version;
-
-      IB_FIRST_PART(io::recv(*_s, version, flags));
-      basic_client<T>::validate_version(IB_EXCHANGE_PROTO_RELIABLE_VERSION, version);
-      IB_NEXT_PART(io::recv(*_s, t, flags));
-      return true;
-    }
-  };
-
 }
 
 #endif

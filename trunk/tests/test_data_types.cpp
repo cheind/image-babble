@@ -57,7 +57,6 @@ template<class T>
 inline void receive_t(const T &should_be, bool should_parse = true) {
   ib::reliable_client<T> c; 
   c.startup(); 
-  c.send_request();
   T t;
   if (should_parse) {
     BOOST_REQUIRE(c.receive(t));
@@ -113,10 +112,7 @@ void client_incompatible_fnc()
   s.startup();
 
   int i;
-  s.send_request();
   BOOST_REQUIRE_THROW(s.receive(i), ib::ib_error);
-  
-  s.send_request();
   BOOST_REQUIRE_THROW(s.receive(i), ib::ib_error);
 }
 
