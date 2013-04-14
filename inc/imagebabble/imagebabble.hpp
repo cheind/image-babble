@@ -30,6 +30,8 @@
 #define __IMAGE_BABBLE_HPP_INCLUDED__
 
 #include "core.hpp"
+#include "fast.hpp"
+#include "reliable.hpp"
 #include "image_support.hpp"
 
 #endif
