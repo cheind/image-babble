@@ -51,7 +51,8 @@ void server_fnc(int &count)
       count += 1;
     }
   }
-  ib::io::recv(ctrl, ib::io::drop(), 0);
+  ib::io::drop d;
+  ib::io::recv(ctrl, d, 0);
 
   s.shutdown();
 }
