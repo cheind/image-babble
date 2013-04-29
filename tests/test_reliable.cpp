@@ -161,7 +161,6 @@ BOOST_AUTO_TEST_CASE(disconnected_client)
 
 BOOST_AUTO_TEST_CASE(missing_client)
 {
-  size_t nclients = 2;
 
   int sum_sent = 0;
   int sum_received[2] = {0, 0};
