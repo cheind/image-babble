@@ -40,10 +40,10 @@ namespace imagebabble {
   class image_group;
 
   namespace io {
-    bool send(zmq::socket_t &, const image &, int);
-    bool recv(zmq::socket_t &, image &, int);
-    bool send(zmq::socket_t &, const image_group &, int);
-    bool recv(zmq::socket_t &, image_group &, int);
+    template<> bool send<image>(zmq::socket_t &, const image &, int);
+    template<> bool recv<image>(zmq::socket_t &, image &, int);
+    template<> bool send<image_group>(zmq::socket_t &, const image_group &, int);
+    template<> bool recv<image_group>(zmq::socket_t &, image_group &, int);
   };
   
   /** Represents a generic image. An image consists of basic header information
@@ -253,8 +253,8 @@ namespace imagebabble {
 
   private:
 
-    friend bool io::send(zmq::socket_t &, const image &, int);
-    friend bool io::recv(zmq::socket_t &, image &, int);
+    friend bool io::send<image>(zmq::socket_t &, const image &, int);
+    friend bool io::recv<image>(zmq::socket_t &, image &, int);
 
     zmq::message_t _msg;
     int _w, _h, _step, _external_type;
@@ -382,8 +382,8 @@ namespace imagebabble {
 
   private:
     
-    friend bool io::send(zmq::socket_t &, const image_group &, int);
-    friend bool io::recv(zmq::socket_t &, image_group &, int);
+    friend bool io::send<image_group>(zmq::socket_t &, const image_group &, int);
+    friend bool io::recv<image_group>(zmq::socket_t &, image_group &, int);
 
     std::vector<image> _images;
     std::vector<std::string> _names;
@@ -394,6 +394,7 @@ namespace imagebabble {
   namespace io {
     
     /** Send image. */
+    template<>
     inline bool send(zmq::socket_t &s, const image &v, int flags) 
     { 
       std::ostringstream ostr;
@@ -422,6 +423,7 @@ namespace imagebabble {
       * the implementation attempts to receive data directly into that buffer.
       * If the buffer is too small to fit the content, the received bytes are
       * truncated to fit and false is returned. */
+    template<>
     inline bool recv(zmq::socket_t &s, image &v, int flags) 
     {
       zmq::message_t msg;
@@ -451,6 +453,7 @@ namespace imagebabble {
     }
 
     /** Send image group. */
+    template<>
     inline bool send(zmq::socket_t &s, const image_group &v, int flags) 
     {
       IB_FIRST_PART(io::send(s, v.get_id(), flags | ZMQ_SNDMORE));
@@ -461,6 +464,7 @@ namespace imagebabble {
     }
 
     /** Receive image group. */
+    template<>
     inline bool recv(zmq::socket_t &s, image_group &v, int flags) 
     {
       IB_FIRST_PART(io::recv(s, v._id, flags));
@@ -479,10 +483,6 @@ namespace imagebabble {
   void cvt_image(const From &src, To &to, const MemOp&) 
   {
 
-    /* If your compiler gets trapped here, it means that no suitable
-     * image conversion function was found by your compiler. Either it does
-     * not exist or is not included. */
-    static_assert(false);
   }
 
   /** Generic image conversion. Default implementation uses conversion methods

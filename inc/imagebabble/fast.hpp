@@ -62,12 +62,12 @@ namespace imagebabble {
       */
     virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     { 
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_PUB));
+      if (!network_entity::_s) {
+        network_entity::_s = socket_ptr(new zmq::socket_t(*network_entity::_ctx, ZMQ_PUB));
         network_entity::apply_socket_options();
       }
 
-      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(network_entity::_s->bind(addr.c_str()));
     }
 
     /** Publish data to clients.
@@ -80,9 +80,9 @@ namespace imagebabble {
       **/
     virtual bool publish(const T &t, int timeout_ms = 0, size_t min_serve = 0)
     {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
-      io::send(*_s, IB_EXCHANGE_PROTO_FAST_VERSION, ZMQ_SNDMORE);
-      io::send(*_s, t, 0);
+      IB_ASSERT(network_entity::_s, ib_error::EINVALIDSOCKET);
+      io::send(*network_entity::_s, IB_EXCHANGE_PROTO_FAST_VERSION, ZMQ_SNDMORE);
+      io::send(*network_entity::_s, t, 0);
       return true;
     }
   };
@@ -109,18 +109,18 @@ namespace imagebabble {
       */      
     virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_SUB));
+      if (!network_entity::_s) {
+        network_entity::_s = socket_ptr(new zmq::socket_t(*network_entity::_ctx, ZMQ_SUB));
       
         network_entity::apply_socket_options();
-        IB_CATCH_ZMQ_RETHROW(_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
+        IB_CATCH_ZMQ_RETHROW(network_entity::_s->setsockopt(ZMQ_SUBSCRIBE, 0, 0));
 
         size_t recvhwm_size = sizeof (_recv_skip);
-        IB_CATCH_ZMQ_RETHROW(_s->getsockopt(ZMQ_RCVHWM, &_recv_skip, &recvhwm_size));
+        IB_CATCH_ZMQ_RETHROW(network_entity::_s->getsockopt(ZMQ_RCVHWM, &_recv_skip, &recvhwm_size));
 
       }
 
-      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(network_entity::_s->connect(addr.c_str()));
     }
 
     /** Receive data.
@@ -137,7 +137,7 @@ namespace imagebabble {
       */
     virtual bool receive(T &t, int timeout_ms = 1000)
     {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+      IB_ASSERT(network_entity::_s, ib_error::EINVALIDSOCKET);
 
       io::ensure_cleanup_partial_messages ecpm(this->get_socket());
 
@@ -156,7 +156,7 @@ namespace imagebabble {
       }
 
       // We haven't received anything. See if waiting is ok.
-      if (has_wait && io::is_data_pending(*_s, timeout_ms)) {
+      if (has_wait && io::is_data_pending(*network_entity::_s, timeout_ms)) {
         receive_message(t, 0);
         return true;
       } else {
@@ -180,9 +180,9 @@ namespace imagebabble {
     {
       std::string version;
 
-      IB_FIRST_PART(io::recv(*_s, version, flags));
+      IB_FIRST_PART(io::recv(*network_entity::_s, version, flags));
       network_entity::validate_version(IB_EXCHANGE_PROTO_FAST_VERSION, version);
-      IB_NEXT_PART(io::recv(*_s, t, flags));
+      IB_NEXT_PART(io::recv(*network_entity::_s, t, flags));
 
       return true;
     }
