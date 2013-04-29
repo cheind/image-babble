@@ -73,15 +73,15 @@ namespace imagebabble {
       */
     virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {  
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_ROUTER));
+      if (!network_entity::_s) {
+        network_entity::_s = socket_ptr(new zmq::socket_t(*network_entity::_ctx, ZMQ_ROUTER));
         network_entity::apply_socket_options();
       } else {
         basic_server<T>::shutdown();
         startup(addr);
       }
 
-      IB_CATCH_ZMQ_RETHROW(_s->bind(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(network_entity::_s->bind(addr.c_str()));
     }
 
     /** Shutdown server */
@@ -102,7 +102,7 @@ namespace imagebabble {
       **/
     virtual bool publish(const T &t, int timeout_ms = -1, size_t min_serve = 1)
     {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+      IB_ASSERT(network_entity::_s, ib_error::EINVALIDSOCKET);
 
       timeout tout(timeout_ms);
       
@@ -116,7 +116,7 @@ namespace imagebabble {
         // No more data, see if we should wait for more
         int timeleft = tout.timeleft();
         if ((_clients.size() < min_serve) && timeout::is_timeleft(timeleft)) {          
-          new_data = io::is_data_pending(*_s, timeleft);          
+          new_data = io::is_data_pending(*network_entity::_s, timeleft);          
         }
 
       } while (new_data);
@@ -143,7 +143,7 @@ namespace imagebabble {
         // No more data, see if we should wait for more
         int timeleft = tout.timeleft();
         if ((count_acks(_next_id) < _clients.size()) && timeout::is_timeleft(timeleft)) {
-          new_data = io::is_data_pending(*_s, timeleft);          
+          new_data = io::is_data_pending(*network_entity::_s, timeleft);          
         }
 
       } while (new_data);
@@ -159,17 +159,17 @@ namespace imagebabble {
       std::string address, version, type;
       long id;
 
-      IB_FIRST_PART(io::recv(*_s, address, flags));
-      IB_NEXT_PART(io::recv(*_s, version, flags));
+      IB_FIRST_PART(io::recv(*network_entity::_s, address, flags));
+      IB_NEXT_PART(io::recv(*network_entity::_s, version, flags));
       network_entity::validate_version(IB_EXCHANGE_PROTO_RELIABLE_VERSION, version);
-      IB_NEXT_PART(io::recv(*_s, type, flags));
+      IB_NEXT_PART(io::recv(*network_entity::_s, type, flags));
 
       if (type == IB_EXCHANGE_PROTO_RELIABLE_REGISTER) {
         _clients[address] = -1;
       } else if (type == IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT) {
         _clients.erase(address);
       } else if (type == IB_EXCHANGE_PROTO_RELIABLE_ACK) {
-        IB_NEXT_PART(io::recv(*_s, id, flags));
+        IB_NEXT_PART(io::recv(*network_entity::_s, id, flags));
         client_map::iterator iter = _clients.find(address);
         if (iter != _clients.end() && iter->second < id) {
           iter->second = id;
@@ -209,11 +209,11 @@ namespace imagebabble {
     /** Send payload to client */
     bool send_client_payload(const std::string &addr, long id, const T &t)
     {
-      IB_FIRST_PART(io::send(*_s, addr, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_PAYLOAD, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, id, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, t, 0));
+      IB_FIRST_PART(io::send(*network_entity::_s, addr, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_PAYLOAD, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, id, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, t, 0));
 
       return true;
     }
@@ -221,9 +221,9 @@ namespace imagebabble {
     /** Send disconnect to client */
     bool send_client_disconnect(const std::string &addr)
     {
-      IB_FIRST_PART(io::send(*_s, addr, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT, 0));
+      IB_FIRST_PART(io::send(*network_entity::_s, addr, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT, 0));
       
       return true;
     }
@@ -247,7 +247,7 @@ namespace imagebabble {
 
     /** Disconnect from server. */
     virtual void shutdown() {
-      if (_s) {
+      if (network_entity::_s) {
         send_disconnect(ZMQ_DONTWAIT);
       }
       basic_client<T>::shutdown();
@@ -261,15 +261,15 @@ namespace imagebabble {
       */
     virtual void startup(const std::string &addr = "tcp://127.0.0.1:6000")
     {
-      if (!_s) {
-        _s = socket_ptr(new zmq::socket_t(*_ctx, ZMQ_DEALER));     
+      if (!network_entity::_s) {
+        network_entity::_s = socket_ptr(new zmq::socket_t(*network_entity::_ctx, ZMQ_DEALER));     
         network_entity::apply_socket_options();
       } else {
         shutdown();
         startup(addr);
       } 
       
-      IB_CATCH_ZMQ_RETHROW(_s->connect(addr.c_str()));
+      IB_CATCH_ZMQ_RETHROW(network_entity::_s->connect(addr.c_str()));
       _addr = addr;
       send_registration(0);
     }
@@ -284,29 +284,28 @@ namespace imagebabble {
       * \throws ib_error on error */
     virtual bool receive(T &t, int timeout_ms = -1) 
     {
-      IB_ASSERT(_s, ib_error::EINVALIDSOCKET);
+      IB_ASSERT(network_entity::_s, ib_error::EINVALIDSOCKET);
 
       io::ensure_cleanup_partial_messages ecpm(this->get_socket());      
 
       // Try receiving data
       std::string version, type;
-      bool has_data = false;
 
-      if (!io::recv(*_s, version, ZMQ_DONTWAIT)) {
-        if (timeout_ms == 0 || !io::is_data_pending(*_s, timeout_ms)) {
+      if (!io::recv(*network_entity::_s, version, ZMQ_DONTWAIT)) {
+        if (timeout_ms == 0 || !io::is_data_pending(*network_entity::_s, timeout_ms)) {
           return false;
         }
-        IB_FIRST_PART(io::recv(*_s, version, ZMQ_DONTWAIT));
+        IB_FIRST_PART(io::recv(*network_entity::_s, version, ZMQ_DONTWAIT));
       } 
 
       network_entity::validate_version(IB_EXCHANGE_PROTO_RELIABLE_VERSION, version);
-      IB_NEXT_PART(io::recv(*_s, type, ZMQ_DONTWAIT));
+      IB_NEXT_PART(io::recv(*network_entity::_s, type, ZMQ_DONTWAIT));
 
       if (type == IB_EXCHANGE_PROTO_RELIABLE_PAYLOAD) {
         std::string id;
-        IB_NEXT_PART(io::recv(*_s, id, ZMQ_DONTWAIT));        
+        IB_NEXT_PART(io::recv(*network_entity::_s, id, ZMQ_DONTWAIT));        
         send_ack(id, 0);
-        IB_NEXT_PART(io::recv(*_s, t, ZMQ_DONTWAIT));        
+        IB_NEXT_PART(io::recv(*network_entity::_s, t, ZMQ_DONTWAIT));        
         return true;
       } else if (type == IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT) {
         startup(_addr);
@@ -321,23 +320,23 @@ namespace imagebabble {
 
     // Send registration to server
     bool send_registration(int flags) {
-      IB_FIRST_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_REGISTER, flags));
+      IB_FIRST_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_REGISTER, flags));
       return true;
     }
 
     // Send disconnect to server
     bool send_disconnect(int flags) {
-      IB_FIRST_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));      
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT, flags));
+      IB_FIRST_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));      
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_DISCONNECT, flags));
       return true;
     }
 
     // Send ACK to server
     bool send_ack(const std::string &id, int flags) {
-      IB_FIRST_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));      
-      IB_NEXT_PART(io::send(*_s, IB_EXCHANGE_PROTO_RELIABLE_ACK, flags | ZMQ_SNDMORE));
-      IB_NEXT_PART(io::send(*_s, id, flags));
+      IB_FIRST_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_VERSION, ZMQ_SNDMORE));      
+      IB_NEXT_PART(io::send(*network_entity::_s, IB_EXCHANGE_PROTO_RELIABLE_ACK, flags | ZMQ_SNDMORE));
+      IB_NEXT_PART(io::send(*network_entity::_s, id, flags));
       return true;
     }
 

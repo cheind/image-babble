@@ -37,7 +37,6 @@
 #include <string>
 #include <limits>
 #include <vector>
-#include <unordered_set>
 
 /** Whether the compiler supports move constructors and assignment operators. */
 #define IB_HAS_RVALUE_REFS ZMQ_HAS_RVALUE_REFS
@@ -646,7 +645,6 @@ namespace imagebabble {
       size_t count;
 
       IB_FIRST_PART(io::recv(s, count, flags));
-
       // Note, use resize to allow existing elements to be reused.
       c.resize(count);
 
@@ -656,7 +654,8 @@ namespace imagebabble {
       }
 
       // Array ends with empty element
-      IB_NEXT_PART(io::recv(s, drop(), flags));
+        drop d;
+      IB_NEXT_PART(io::recv(s, d, flags));
 
       return true;
     }
