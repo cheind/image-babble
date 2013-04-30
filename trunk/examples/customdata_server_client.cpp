@@ -28,7 +28,7 @@ namespace imagebabble {
   namespace io {
 
     /** Send a person */
-	template<>
+    template<>
     bool send(zmq::socket_t &s, const person &p, int flags)
     {
       IB_FIRST_PART(io::send(s, p.name, flags | ZMQ_SNDMORE));

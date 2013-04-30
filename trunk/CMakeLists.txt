@@ -62,16 +62,22 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${IMAGEBABBLE_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${IMAGEBABBLE_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${IMAGEBABBLE_VERSION_BUILD})
 set(CPACK_SYSTEM_NAME "x86_x64")
-set(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS OFF)
 set(OpenCV_SHARED ON)
 
 find_package(ZeroMQ REQUIRED)
-find_package(OpenCV)
-find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono)
-find_package(Doxygen)
+find_package(OpenCV COMPONENTS core highgui)
+#find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono)
+#find_package(Doxygen)
+
+#if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+#            set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++0x")
+#            set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
+# 
+#endif()
 
 # Library
 add_library(lib_imagebabble STATIC 
