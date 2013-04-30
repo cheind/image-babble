@@ -62,6 +62,7 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${IMAGEBABBLE_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${IMAGEBABBLE_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${IMAGEBABBLE_VERSION_BUILD})
 set(CPACK_SYSTEM_NAME "x86_x64")
+set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS OFF)
@@ -118,7 +119,7 @@ if (Boost_FOUND AND OpenCV_FOUND)
     tests/test_image_support.cpp
     tests/test_image_opencv.cpp)
 
-  target_link_libraries(test_imagebabble ${TEST_LIBS})
+  target_link_libraries(test_imagebabble pgm ${TEST_LIBS})
 endif()
 
 
