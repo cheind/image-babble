@@ -73,7 +73,7 @@ find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono
 find_package(Doxygen QUIET)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-  set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
+  set(CMAKE_CXX_FLAGS "-std=c++0x")
 elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
 endif()
