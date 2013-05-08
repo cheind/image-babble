@@ -71,11 +71,15 @@ find_package(ZeroMQ REQUIRED)
 find_package(OpenCV COMPONENTS core highgui QUIET)
 find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono QUIET)
 find_package(Doxygen QUIET)
+find_package(OpenNI QUIET)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(CMAKE_CXX_FLAGS "-std=c++0x")
 elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
+  #set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
+  set(CMAKE_OSX_SYSROOT "macosx" CACHE PATH "" FORCE)
+  set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++0x") # c++11
+  set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++") #c++11 standard library	
 endif()
 
 # Library
@@ -85,6 +89,7 @@ add_library(lib_imagebabble STATIC
             inc/imagebabble/reliable.hpp
             inc/imagebabble/image_support.hpp
             inc/imagebabble/conversion/opencv.hpp
+	    inc/imagebabble/conversion/openni.hpp
             inc/imagebabble/imagebabble.hpp)
 
 set_target_properties(lib_imagebabble PROPERTIES LINKER_LANGUAGE CXX)
