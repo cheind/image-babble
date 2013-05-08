@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     ib::cvt_image(ib_image, cv_img, ib::copy_mem());
 
     // Show image
-    cv::imshow("image", cv_img);
+    //cv::imshow("image", cv_img);
     cv::waitKey(10);
   }
   

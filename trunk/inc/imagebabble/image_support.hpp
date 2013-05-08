@@ -91,7 +91,9 @@ namespace imagebabble {
       /** BGR format using 8 bits per channel. */
       FORMAT_BGR_888,
       /** Grayscale image using 8 bit channel. */
-      FORMAT_GRAY_8
+      FORMAT_GRAY_8,
+      /** Depth image using 16 bit channel.    */
+      FORMAT_DEPTH_16
     };
 
     /** Free function prototype when sharing user memory */

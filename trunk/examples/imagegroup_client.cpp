@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     for (size_t i = 0; i < images.size(); ++i) {
 
       cv::Mat cv_img = ib::cvt_image< cv::Mat >(images[i], ib::share_mem());      
-      cv::imshow(names[i], cv_img);      
+      //cv::imshow(names[i], cv_img);
     }
 
   }
