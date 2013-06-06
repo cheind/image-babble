@@ -67,11 +67,16 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS OFF)
 set(OpenCV_SHARED ON)
 
+
 find_package(ZeroMQ REQUIRED)
 find_package(OpenCV COMPONENTS core highgui QUIET)
 find_package(Boost COMPONENTS thread system unit_test_framework date_time chrono QUIET)
 find_package(Doxygen QUIET)
-find_package(OpenNI QUIET)
+find_package(OpenNI2 QUIET)
+
+
+
+
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(CMAKE_CXX_FLAGS "-std=c++0x")
@@ -127,7 +132,8 @@ if (Boost_FOUND AND OpenCV_FOUND)
     tests/test_fast.cpp
     tests/test_data_types.cpp
     tests/test_image_support.cpp
-    tests/test_image_opencv.cpp)
+    tests/test_image_opencv.cpp
+    tests/test_image_openni.cpp)
 
   target_link_libraries(test_imagebabble ${TEST_LIBS})
 endif()

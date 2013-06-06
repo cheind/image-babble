@@ -33,15 +33,15 @@
 #include "../image_support.hpp"
 
 #include <OpenNI.h>
-
-
 namespace imagebabble {
 
   /** Convert from OpenCV matrix to image. */
   template<class MemOp>
-  inline void cvt_oniimage(const openni::DepthPixel& src, image &to, const MemOp &m)
+  inline void cvt_oniimage(openni::VideoFrameRef src, image &to, const MemOp &m)
   {
-    to = image(src.cols, src.rows, src.step, src.data, m);
+	const void* data = src.getData();
+	void* datab = const_cast<void*>(data);
+    to = image(src.getWidth(), src.getHeight(), src.getStrideInBytes(), datab, m);
     to.set_format(image::FORMAT_DEPTH_16);
   }
   
