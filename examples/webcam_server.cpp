@@ -27,8 +27,12 @@ int main(int argc, char *argv[])
    
   // Open video device
   cv::VideoCapture vc(0);
+  if (!vc.isOpened()) {
+    std::cerr << "Failed to open capture device" << std::endl;
+  }
+  
   cv::Mat cv_img;
-   
+
   // While more images are available ...
   while (vc.grab() && vc.retrieve(cv_img)) 
   {

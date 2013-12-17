@@ -26,8 +26,8 @@ int main(int argc, char *argv[])
 
   // Load a bunch of images
   cv::Mat cv_img[2];
-  //cv_img[0] = cv::imread("image_0.png");
-  //cv_img[1] = cv::imread("image_1.png");
+  cv_img[0] = cv::imread("image_0.png");
+  cv_img[1] = cv::imread("image_1.png");
 
   if (cv_img[0].empty() || cv_img[1].empty()) {
     std::cerr << "Could not find images" << std::endl;
