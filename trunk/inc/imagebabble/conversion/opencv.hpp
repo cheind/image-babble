@@ -88,10 +88,15 @@ namespace imagebabble {
     case image::FORMAT_GRAY_8:
       type = CV_8UC1;
       break;
+    case image::FORMAT_DEPTH_16:
+      type = CV_16UC1;
+      break;
     case image::FORMAT_UNKNOWN:
       // Use external type
       type = src.get_external_type();
       break;
+    default:
+      throw ib_error(ib_error::ECONVERSION);
     }
 
     to = cv::Mat( 
