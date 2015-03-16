@@ -1,7 +1,3 @@
-**Note**
-Due to Google Code is shutting down this project has moved to
-https://github.com/cheind/image-babble
-
 ImageBabble is a lightweight C++ library to send and receive images via networks. It provides implementations of fast and reliable communication protocols.
 
 The minimum example below shows the essence of an image streaming server. It uses OpenCV for image and device handling. ImageBabble itself does not dependent on OpenCV, but its design allows smooth interaction between libraries.
